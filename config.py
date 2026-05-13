@@ -27,7 +27,7 @@ TOP_N_WALLETS       = 50           # top wallets a trackear
 WALLET_LOOKBACK_DAYS= 90           # dias de histórico a analisar
 
 # ── Market scorer ───────────────────────────────────────────────────────────
-MAX_MARKETS_TO_SCORE= 500          # mercados a puxar da API antes de filtrar
+MAX_MARKETS_TO_SCORE= 250          # mercados a puxar da API antes de filtrar
 MIN_LIQUIDITY_USDC  = 1_000        # liquidez mínima em USDC
 MAX_SPREAD_PCT      = 0.08         # spread máximo (8 cents num mercado 0-1)
 MIN_HOURS_TO_RESOLVE= 2            # mercados com resolução > 2h
