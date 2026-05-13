@@ -21,7 +21,7 @@ from execution.executor     import Executor
 from execution.exit_manager import ExitManager
 from portfolio              import Portfolio
 from dashboard_writer       import write as write_dashboard
-from server                 import start_server, is_paused
+from server                 import start_server, is_paused, is_started
 
 logging.basicConfig(
     level   = logging.INFO,
@@ -199,8 +199,10 @@ async def main():
     exit_manager = ExitManager(executor)
 
     while True:
-        if is_paused():
-            log.info("Bot em pausa — aguarda retoma via dashboard.")
+        if not is_started():
+            log.info("Bot em standby — aguarda Start no dashboard.")
+        elif is_paused():
+            log.info("Bot em pausa — aguarda retoma no dashboard.")
         else:
             try:
                 await run_cycle(portfolio, executor, exit_manager)

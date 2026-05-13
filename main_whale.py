@@ -38,7 +38,7 @@ from portfolio              import Portfolio
 
 # Portfolio separado para o bot whale
 import portfolio as _portfolio_module
-_portfolio_module.STATE_FILE = _portfolio_module.Path("portfolio_state_whale.json")
+_portfolio_module.STATE_FILE = _portfolio_module.Path("/data/portfolio_state_whale.json") if _portfolio_module.Path("/data").exists() else _portfolio_module.Path("portfolio_state_whale.json")
 from pathlib import Path
 
 logging.basicConfig(
@@ -50,8 +50,12 @@ log     = logging.getLogger("whale_main")
 console = Console()
 
 DRY_RUN          = os.getenv("DRY_RUN", "true").lower() == "true"
-DASHBOARD_FILE   = Path("dashboard_data_whale.json")
+DATA_DIR_WHALE   = Path("/data") if Path("/data").exists() else Path(".")
+DASHBOARD_FILE   = DATA_DIR_WHALE / "dashboard_data_whale.json"
 POLY_DATA_API    = "https://data-api.polymarket.com"
+
+PAUSE_FILE_WHALE   = DATA_DIR_WHALE / "PAUSE_WHALE"
+STARTED_FILE_WHALE = DATA_DIR_WHALE / "STARTED_WHALE"
 
 MIN_WHALES       = 2
 MIN_WHALE_SIZE   = 50
@@ -397,10 +401,15 @@ async def main():
     exit_manager = ExitManager(executor)
 
     while True:
-        try:
-            await run_cycle(portfolio, executor, exit_manager)
-        except Exception as e:
-            log.error(f"Erro no ciclo: {e}", exc_info=True)
+        if not STARTED_FILE_WHALE.exists():
+            log.info("Whale bot em standby - aguarda Start no dashboard.")
+        elif PAUSE_FILE_WHALE.exists():
+            log.info("Whale bot em pausa - aguarda retoma no dashboard.")
+        else:
+            try:
+                await run_cycle(portfolio, executor, exit_manager)
+            except Exception as e:
+                log.error(f"Erro no ciclo: {e}", exc_info=True)
         log.info(f"A aguardar {RUN_INTERVAL_MINS} minutos...\n")
         await asyncio.sleep(RUN_INTERVAL_MINS * 60)
 

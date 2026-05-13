@@ -3,7 +3,8 @@ import json
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-DASHBOARD_FILE = Path("dashboard_data.json")
+DATA_DIR       = Path("/data") if Path("/data").exists() else Path(".")
+DASHBOARD_FILE = DATA_DIR / "dashboard_data.json"
 
 
 def _hours_left(resolves_at) -> str:

@@ -7,13 +7,17 @@ from pathlib import Path
 from data.models import OpenPosition, TradeResult, Side
 
 log = logging.getLogger(__name__)
-STATE_FILE = Path("portfolio_state.json")
+
+# Usa /data se existir (Railway Volume), senão pasta local
+DATA_DIR   = Path("/data") if Path("/data").exists() else Path(".")
+STATE_FILE = DATA_DIR / "portfolio_state.json"
 
 
 class Portfolio:
-    def __init__(self, max_open: int, max_daily: int):
+    def __init__(self, max_open: int, max_daily: int, state_file: Path = None):
         self.max_open    = max_open
         self.max_daily   = max_daily
+        self.state_file  = state_file or STATE_FILE
         self.positions:  list[OpenPosition]  = []
         self.history:    list[TradeResult]   = []
         self._daily_count: dict[str, int]    = {}
@@ -62,7 +66,7 @@ class Portfolio:
 
     def _save(self):
         try:
-            STATE_FILE.write_text(json.dumps({
+            self.state_file.write_text(json.dumps({
                 "daily_count": self._daily_count,
                 "history":     [self._result_to_dict(r) for r in self.history],
             }, indent=2), encoding="utf-8")
@@ -70,10 +74,10 @@ class Portfolio:
             log.warning(f"Não foi possível guardar estado: {e}")
 
     def _load(self):
-        if not STATE_FILE.exists():
+        if not self.state_file.exists():
             return
         try:
-            data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+            data = json.loads(self.state_file.read_text(encoding="utf-8"))
             self._daily_count = data.get("daily_count", {})
             for r in data.get("history", []):
                 try:

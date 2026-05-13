@@ -107,8 +107,10 @@
       <div class="dot dot-purple" id="dot-whale"></div>
       <span id="status-whale">whale-first · —</span>
     </div>
-    <div style="display:flex;gap:8px;margin-left:12px;">
-      <button id="btn-pause" onclick="togglePause()" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text);cursor:pointer;">⏸ pausar</button>
+    <div style="display:flex;gap:6px;margin-left:12px;">
+      <button id="btn-start" onclick="handleStart()" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--green);background:var(--surface);color:var(--green);cursor:pointer;">▶ start</button>
+      <button id="btn-pause" onclick="handlePause()" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--muted);cursor:pointer;">⏸ pausar</button>
+      <button id="btn-stop" onclick="handleStop()" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--red);background:var(--surface);color:var(--red);cursor:pointer;">⏹ stop</button>
     </div>
   </div>
 </header>
@@ -402,30 +404,49 @@ setInterval(() => {
   }
 }, 1000);
 
-let isPaused = false;
+let isPaused  = false;
+let isStarted = false;
 
-async function togglePause() {
-  const endpoint = isPaused ? '/resume' : '/pause';
-  try {
-    const r = await fetch(endpoint, {method: 'POST'});
-    const d = await r.json();
-    isPaused = d.paused;
-    updatePauseBtn();
-  } catch(e) {
-    console.error('Erro ao comunicar com o servidor:', e);
-  }
+async function handleStart() {
+  await fetch('/start', {method: 'POST'});
+  await checkPauseStatus();
 }
 
-function updatePauseBtn() {
-  const btn = document.getElementById('btn-pause');
-  if (isPaused) {
-    btn.textContent = '▶ retomar';
-    btn.style.color = 'var(--yellow)';
-    btn.style.borderColor = 'var(--yellow)';
+async function handlePause() {
+  const endpoint = isPaused ? '/resume' : '/pause';
+  await fetch(endpoint, {method: 'POST'});
+  await checkPauseStatus();
+}
+
+async function handleStop() {
+  await fetch('/stop', {method: 'POST'});
+  await checkPauseStatus();
+}
+
+function updateButtons() {
+  const btnStart = document.getElementById('btn-start');
+  const btnPause = document.getElementById('btn-pause');
+  const btnStop  = document.getElementById('btn-stop');
+
+  if (!isStarted) {
+    btnStart.style.opacity = '1';
+    btnPause.style.opacity = '0.3';
+    btnStop.style.opacity  = '0.3';
+    btnPause.textContent   = '⏸ pausar';
+  } else if (isPaused) {
+    btnStart.style.opacity = '0.3';
+    btnPause.style.opacity = '1';
+    btnPause.textContent   = '▶ retomar';
+    btnPause.style.color   = 'var(--yellow)';
+    btnPause.style.borderColor = 'var(--yellow)';
+    btnStop.style.opacity  = '1';
   } else {
-    btn.textContent = '⏸ pausar';
-    btn.style.color = 'var(--text)';
-    btn.style.borderColor = 'var(--border2)';
+    btnStart.style.opacity = '0.3';
+    btnPause.style.opacity = '1';
+    btnPause.textContent   = '⏸ pausar';
+    btnPause.style.color   = 'var(--muted)';
+    btnPause.style.borderColor = 'var(--border2)';
+    btnStop.style.opacity  = '1';
   }
 }
 
@@ -433,8 +454,9 @@ async function checkPauseStatus() {
   try {
     const r = await fetch('/status');
     const d = await r.json();
-    isPaused = d.paused;
-    updatePauseBtn();
+    isPaused  = d.paused;
+    isStarted = d.started;
+    updateButtons();
   } catch(e) {}
 }
 
