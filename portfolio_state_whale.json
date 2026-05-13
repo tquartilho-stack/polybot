@@ -1,0 +1,67 @@
+{
+  "daily_count": {
+    "2026-05-13": 5
+  },
+  "history": [
+    {
+      "trade_id": "e76ce9df",
+      "market_question": "Will China invades Taiwan before GTA VI?",
+      "side": "NO",
+      "size_usdc": 10.0,
+      "entry_price": 0.505,
+      "exit_price": 0.46,
+      "pnl_usdc": -0.8910891089108908,
+      "hold_hours": 0.00022135861111111113,
+      "exit_reason": "volume_spike",
+      "closed_at": "2026-05-13T02:37:36.959618"
+    },
+    {
+      "trade_id": "f39f3862",
+      "market_question": "Will Jesus Christ return before GTA VI?",
+      "side": "NO",
+      "size_usdc": 20.0,
+      "entry_price": 0.525,
+      "exit_price": 0.475,
+      "pnl_usdc": -1.9047619047619064,
+      "hold_hours": 1.1210390816666667,
+      "exit_reason": "timeout",
+      "closed_at": "2026-05-13T03:44:50.943020"
+    },
+    {
+      "trade_id": "294d5b83",
+      "market_question": "Trump out as President before GTA VI?",
+      "side": "NO",
+      "size_usdc": 20.0,
+      "entry_price": 0.495,
+      "exit_price": 0.475,
+      "pnl_usdc": -0.8080808080808087,
+      "hold_hours": 1.1210330138888889,
+      "exit_reason": "timeout",
+      "closed_at": "2026-05-13T03:44:51.111610"
+    },
+    {
+      "trade_id": "dd9f7280",
+      "market_question": "Will the Colorado Avalanche win the 2026 NHL Stanley Cup?",
+      "side": "YES",
+      "size_usdc": 20.0,
+      "entry_price": 0.40900000000000003,
+      "exit_price": 0.525,
+      "pnl_usdc": 5.672371638141809,
+      "hold_hours": 1.1210131072222222,
+      "exit_reason": "timeout",
+      "closed_at": "2026-05-13T03:44:51.268747"
+    },
+    {
+      "trade_id": "eafb9d50",
+      "market_question": "Will the Carolina Hurricanes win the 2026 NHL Stanley Cup?",
+      "side": "YES",
+      "size_usdc": 20.0,
+      "entry_price": 0.365,
+      "exit_price": 0.525,
+      "pnl_usdc": 8.767123287671234,
+      "hold_hours": 1.1209788605555555,
+      "exit_reason": "timeout",
+      "closed_at": "2026-05-13T03:44:51.428222"
+    }
+  ]
+}

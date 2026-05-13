@@ -1,0 +1,103 @@
+{
+  "updated_at": "2026-05-13T18:21:40.743977+00:00",
+  "next_cycle_at": "2026-05-13T18:51:40.743985+00:00",
+  "cycle": 32,
+  "markets_total": 37,
+  "markets_scored": 0,
+  "signals": {
+    "whale_lead": 0,
+    "arbitrage": 0,
+    "convergence": 0
+  },
+  "consensus_full": 0,
+  "total_trades": 5,
+  "wins": 2,
+  "win_rate": 40.0,
+  "total_pnl": 10.84,
+  "open_positions": [],
+  "top_decisions": [],
+  "recent_trades": [
+    {
+      "trade_id": "eafb9d50",
+      "question": "Will the Carolina Hurricanes win the 2026 NHL Stan",
+      "side": "YES",
+      "entry": 0.365,
+      "exit": 0.525,
+      "pnl": 8.77,
+      "reason": "timeout",
+      "hours": 1.1
+    },
+    {
+      "trade_id": "dd9f7280",
+      "question": "Will the Colorado Avalanche win the 2026 NHL Stanl",
+      "side": "YES",
+      "entry": 0.409,
+      "exit": 0.525,
+      "pnl": 5.67,
+      "reason": "timeout",
+      "hours": 1.1
+    },
+    {
+      "trade_id": "294d5b83",
+      "question": "Trump out as President before GTA VI?",
+      "side": "NO",
+      "entry": 0.495,
+      "exit": 0.475,
+      "pnl": -0.81,
+      "reason": "timeout",
+      "hours": 1.1
+    },
+    {
+      "trade_id": "f39f3862",
+      "question": "Will Jesus Christ return before GTA VI?",
+      "side": "NO",
+      "entry": 0.525,
+      "exit": 0.475,
+      "pnl": -1.9,
+      "reason": "timeout",
+      "hours": 1.1
+    },
+    {
+      "trade_id": "e76ce9df",
+      "question": "Will China invades Taiwan before GTA VI?",
+      "side": "NO",
+      "entry": 0.505,
+      "exit": 0.46,
+      "pnl": -0.89,
+      "reason": "volume_spike",
+      "hours": 0.0
+    }
+  ],
+  "log": [
+    "19:21:38 INFO httpx - HTTP Request: POST https://api.anthropic.com/v1/messages \"HTTP/1.1 400 Bad Request\"",
+    "19:21:38 ERROR scoring.market_scorer - Erro no batch 14: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cb12qR3oNTLVN2JEVvien'}",
+    "19:21:38 INFO httpx - HTTP Request: POST https://api.anthropic.com/v1/messages \"HTTP/1.1 400 Bad Request\"",
+    "19:21:38 ERROR scoring.market_scorer - Erro no batch 15: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cb12qRtQntCNhvtCPZ4mo'}",
+    "19:21:38 INFO httpx - HTTP Request: POST https://api.anthropic.com/v1/messages \"HTTP/1.1 400 Bad Request\"",
+    "19:21:38 ERROR scoring.market_scorer - Erro no batch 16: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cb12qSgH84H6i7f4tiAAK'}",
+    "19:21:38 INFO httpx - HTTP Request: POST https://api.anthropic.com/v1/messages \"HTTP/1.1 400 Bad Request\"",
+    "19:21:38 ERROR scoring.market_scorer - Erro no batch 17: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cb12qTWPf1Yc2H9vtgqb8'}",
+    "19:21:39 INFO httpx - HTTP Request: POST https://api.anthropic.com/v1/messages \"HTTP/1.1 400 Bad Request\"",
+    "19:21:39 ERROR scoring.market_scorer - Erro no batch 18: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cb12qULzRcTLWbaNeC29f'}",
+    "19:21:39 INFO httpx - HTTP Request: POST https://api.anthropic.com/v1/messages \"HTTP/1.1 400 Bad Request\"",
+    "19:21:39 ERROR scoring.market_scorer - Erro no batch 19: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cb12qVG4BP8dNb3Yy8sGX'}",
+    "19:21:39 INFO httpx - HTTP Request: POST https://api.anthropic.com/v1/messages \"HTTP/1.1 400 Bad Request\"",
+    "19:21:39 ERROR scoring.market_scorer - Erro no batch 20: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cb12qWC7agdtfsg1rRoDx'}",
+    "19:21:39 INFO httpx - HTTP Request: POST https://api.anthropic.com/v1/messages \"HTTP/1.1 400 Bad Request\"",
+    "19:21:39 ERROR scoring.market_scorer - Erro no batch 21: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cb12qX3TmBpHiUqTAVW35'}",
+    "19:21:40 INFO httpx - HTTP Request: POST https://api.anthropic.com/v1/messages \"HTTP/1.1 400 Bad Request\"",
+    "19:21:40 ERROR scoring.market_scorer - Erro no batch 22: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cb12qXu4YpgRdiDBU2vou'}",
+    "19:21:40 INFO httpx - HTTP Request: POST https://api.anthropic.com/v1/messages \"HTTP/1.1 400 Bad Request\"",
+    "19:21:40 ERROR scoring.market_scorer - Erro no batch 23: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cb12qZATWLdXFQCdYTt5X'}",
+    "19:21:40 INFO httpx - HTTP Request: POST https://api.anthropic.com/v1/messages \"HTTP/1.1 400 Bad Request\"",
+    "19:21:40 ERROR scoring.market_scorer - Erro no batch 24: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cb12qa4Y9STJoAZu6KdXU'}",
+    "19:21:40 INFO httpx - HTTP Request: POST https://api.anthropic.com/v1/messages \"HTTP/1.1 400 Bad Request\"",
+    "19:21:40 ERROR scoring.market_scorer - Erro no batch 25: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cb12qb2pgoae8WqCjo5Nf'}",
+    "19:21:40 INFO scoring.market_scorer - Scorer: 518 \u2192 0 mercados com edge",
+    "19:21:40 INFO whale_main -   -> 0 mercados confirmados pelo scorer",
+    "19:21:40 INFO agents.agents - ArbitrageAgent: 0 sinais",
+    "19:21:40 INFO agents.agents - ConvergenceAgent: 0 sinais",
+    "19:21:40 INFO whale_main -   -> 0 sinais totais",
+    "19:21:40 INFO consensus - Consensus: 0 sinais \u2192 0 full size, 0 half size"
+  ]
+}

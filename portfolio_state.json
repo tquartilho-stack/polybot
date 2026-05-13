@@ -1,0 +1,31 @@
+{
+  "daily_count": {
+    "2026-05-13": 8
+  },
+  "history": [
+    {
+      "trade_id": "ee392c01",
+      "market_question": "Will Greece win Eurovision 2026?",
+      "side": "YES",
+      "size_usdc": 10.0,
+      "entry_price": 0.14100000000000001,
+      "exit_price": 0.525,
+      "pnl_usdc": 27.234042553191486,
+      "hold_hours": 1.0411909725,
+      "exit_reason": "timeout",
+      "closed_at": "2026-05-13T03:34:35.584412"
+    },
+    {
+      "trade_id": "74bbb548",
+      "market_question": "Will the price of Bitcoin be above $82,000 on May 13?",
+      "side": "NO",
+      "size_usdc": 10.0,
+      "entry_price": 0.825,
+      "exit_price": 0.475,
+      "pnl_usdc": -4.242424242424242,
+      "hold_hours": 1.0411726558333332,
+      "exit_reason": "timeout",
+      "closed_at": "2026-05-13T03:34:35.736352"
+    }
+  ]
+}

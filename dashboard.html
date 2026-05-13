@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PolyBot Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap');
+  :root {
+    --bg:#0d0f12; --surface:#13161a; --border:#1e2228; --border2:#2a2f38;
+    --text:#e2e6ed; --muted:#5a6170; --green:#2ecc71; --red:#e74c3c;
+    --yellow:#f1c40f; --blue:#3498db; --purple:#9b59b6;
+    --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;min-height:100vh;}
+
+  header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);}
+  .logo{font-family:var(--mono);font-size:15px;font-weight:500;letter-spacing:.05em;}
+  .logo span{color:var(--green);}
+  .header-right{display:flex;align-items:center;gap:20px;}
+  .bot-status{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--muted);}
+  .dot{width:6px;height:6px;border-radius:50%;animation:pulse 2s infinite;}
+  .dot-green{background:var(--green);}
+  .dot-purple{background:var(--purple);}
+  .dot-grey{background:var(--muted);animation:none;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+  .tabs{display:flex;gap:0;padding:0 24px;border-bottom:1px solid var(--border);margin-top:4px;}
+  .tab{padding:10px 20px;font-family:var(--mono);font-size:12px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;transition:all .2s;}
+  .tab:hover{color:var(--text);}
+  .tab.active-scorer{color:var(--green);border-bottom-color:var(--green);}
+  .tab.active-whale{color:var(--purple);border-bottom-color:var(--purple);}
+  .tab.active-compare{color:var(--yellow);border-bottom-color:var(--yellow);}
+  .tab-badge{display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:6px;font-family:var(--mono);}
+  .badge-scorer{background:rgba(46,204,113,.15);color:var(--green);}
+  .badge-whale{background:rgba(155,89,182,.15);color:var(--purple);}
+
+  .tab-content{display:none;}
+  .tab-content.active{display:block;}
+
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:20px 24px;}
+  .metric{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;}
+  .metric-label{font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;}
+  .metric-value{font-family:var(--mono);font-size:24px;font-weight:500;}
+  .metric-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+  .pos{color:var(--green);} .neg{color:var(--red);} .neu{color:var(--text);}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 24px 20px;}
+  .cols3{display:grid;grid-template-columns:2fr 1fr;gap:12px;padding:0 24px 20px;}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .panel-header{padding:10px 14px;border-bottom:1px solid var(--border);font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;display:flex;justify-content:space-between;align-items:center;}
+  .panel-header span{color:var(--text);font-family:var(--mono);}
+
+  table{width:100%;border-collapse:collapse;}
+  th{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:8px 14px;text-align:left;border-bottom:1px solid var(--border);font-weight:500;}
+  td{padding:9px 14px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px;vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  tr:hover td{background:rgba(255,255,255,.02);}
+
+  .tag{display:inline-block;font-size:10px;font-weight:500;padding:2px 6px;border-radius:3px;font-family:var(--mono);}
+  .tag-yes{background:rgba(46,204,113,.15);color:var(--green);}
+  .tag-no{background:rgba(231,76,60,.15);color:var(--red);}
+  .stars{color:var(--yellow);}
+
+  .agents{padding:14px;display:flex;flex-direction:column;gap:12px;}
+  .agent-row{display:flex;align-items:center;gap:10px;}
+  .agent-name{font-family:var(--mono);font-size:11px;color:var(--muted);width:90px;flex-shrink:0;}
+  .agent-bar-bg{flex:1;height:3px;background:var(--border2);border-radius:2px;overflow:hidden;}
+  .agent-bar{height:100%;border-radius:2px;transition:width .5s;}
+  .agent-bar-green{background:var(--green);}
+  .agent-bar-purple{background:var(--purple);}
+  .agent-count{font-family:var(--mono);font-size:11px;color:var(--text);width:20px;text-align:right;}
+
+  .log-panel{padding:12px 14px;font-family:var(--mono);font-size:11px;max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;}
+  .log-line{color:var(--muted);line-height:1.5;}
+  .log-line.ok{color:var(--green);} .log-line.err{color:var(--red);} .log-line.warn{color:var(--yellow);}
+
+  .cycle-info{padding:0 24px 8px;display:flex;align-items:center;gap:16px;font-family:var(--mono);font-size:11px;color:var(--muted);}
+  .cycle-info b{color:var(--text);}
+  .empty{padding:24px;text-align:center;color:var(--muted);font-size:12px;}
+  .resolve-soon{color:var(--yellow);}
+  .offline{color:var(--muted);font-style:italic;}
+
+  /* Compare tab */
+  .compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:20px 24px;}
+  .compare-header{font-family:var(--mono);font-size:12px;font-weight:500;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+  .compare-header.scorer{color:var(--green);}
+  .compare-header.whale{color:var(--purple);}
+  .stat-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;}
+  .stat-row:last-child{border-bottom:none;}
+  .stat-label{color:var(--muted);}
+  .stat-value{font-family:var(--mono);}
+  .winner{color:var(--green);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">poly<span>bot</span> <span style="color:var(--muted);font-size:11px;">v1.0</span></div>
+  <div class="header-right">
+    <div class="bot-status">
+      <div class="dot dot-green" id="dot-scorer"></div>
+      <span id="status-scorer">scorer · —</span>
+    </div>
+    <div class="bot-status">
+      <div class="dot dot-purple" id="dot-whale"></div>
+      <span id="status-whale">whale-first · —</span>
+    </div>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active-scorer" id="tab-scorer" onclick="switchTab('scorer')">
+    scorer-first <span class="tab-badge badge-scorer">claude</span>
+  </div>
+  <div class="tab" id="tab-whale" onclick="switchTab('whale')">
+    whale-first <span class="tab-badge badge-whale">smart money</span>
+  </div>
+  <div class="tab" id="tab-compare" onclick="switchTab('compare')">
+    comparar
+  </div>
+</div>
+
+<!-- TAB: SCORER -->
+<div class="tab-content active" id="content-scorer">
+  <div class="grid">
+    <div class="metric"><div class="metric-label">PnL simulado</div><div class="metric-value" id="s-pnl">$0.00</div><div class="metric-sub" id="s-trades">0 trades</div></div>
+    <div class="metric"><div class="metric-label">Win rate</div><div class="metric-value" id="s-wr">—</div><div class="metric-sub" id="s-wins">—</div></div>
+    <div class="metric"><div class="metric-label">Mercados</div><div class="metric-value" id="s-markets">—</div><div class="metric-sub" id="s-markets-sub">—</div></div>
+    <div class="metric"><div class="metric-label">Posições abertas</div><div class="metric-value" id="s-open">0</div><div class="metric-sub" id="s-next">próximo ciclo em —</div></div>
+  </div>
+  <div class="cycle-info">
+    <span>ciclo <b id="s-cycle">—</b></span>
+    <span>sinais: arb <b id="s-arb">0</b> · conv <b id="s-conv">0</b> · whale <b id="s-whale">0</b></span>
+    <span>consenso completo: <b id="s-consensus">0</b></span>
+  </div>
+  <div class="cols3">
+    <div class="panel"><div class="panel-header">top decisões <span id="s-dec-count">0</span></div><div id="s-decisions"><div class="empty">sem decisões ainda</div></div></div>
+    <div class="panel">
+      <div class="panel-header">agentes</div>
+      <div class="agents">
+        <div class="agent-row"><span class="agent-name">arbitrage</span><div class="agent-bar-bg"><div class="agent-bar agent-bar-green" id="s-bar-arb" style="width:0%"></div></div><span class="agent-count" id="s-cnt-arb">0</span></div>
+        <div class="agent-row"><span class="agent-name">convergence</span><div class="agent-bar-bg"><div class="agent-bar agent-bar-green" id="s-bar-conv" style="width:0%"></div></div><span class="agent-count" id="s-cnt-conv">0</span></div>
+        <div class="agent-row"><span class="agent-name">whale copy</span><div class="agent-bar-bg"><div class="agent-bar agent-bar-green" id="s-bar-whale" style="width:0%"></div></div><span class="agent-count" id="s-cnt-whale">0</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="cols">
+    <div class="panel"><div class="panel-header">posições abertas <span id="s-open-count">0</span></div><div id="s-open-body"><div class="empty">sem posições abertas</div></div></div>
+    <div class="panel"><div class="panel-header">trades recentes <span id="s-recent-count">0</span></div><div id="s-recent-body"><div class="empty">sem trades ainda</div></div></div>
+  </div>
+  <div style="padding:0 24px 20px;"><div class="panel"><div class="panel-header">log</div><div class="log-panel" id="s-log"></div></div></div>
+</div>
+
+<!-- TAB: WHALE -->
+<div class="tab-content" id="content-whale">
+  <div class="grid">
+    <div class="metric"><div class="metric-label">PnL simulado</div><div class="metric-value" id="w-pnl">$0.00</div><div class="metric-sub" id="w-trades">0 trades</div></div>
+    <div class="metric"><div class="metric-label">Win rate</div><div class="metric-value" id="w-wr">—</div><div class="metric-sub" id="w-wins">—</div></div>
+    <div class="metric"><div class="metric-label">Mercados</div><div class="metric-value" id="w-markets">—</div><div class="metric-sub" id="w-markets-sub">—</div></div>
+    <div class="metric"><div class="metric-label">Posições abertas</div><div class="metric-value" id="w-open">0</div><div class="metric-sub" id="w-next">próximo ciclo em —</div></div>
+  </div>
+  <div class="cycle-info">
+    <span>ciclo <b id="w-cycle">—</b></span>
+    <span>posições whale analisadas: <b id="w-whale-pos">—</b></span>
+    <span>consenso completo: <b id="w-consensus">0</b></span>
+  </div>
+  <div class="cols3">
+    <div class="panel"><div class="panel-header">top decisões <span id="w-dec-count">0</span></div><div id="w-decisions"><div class="empty offline">a aguardar primeiro ciclo do bot whale-first...</div></div></div>
+    <div class="panel">
+      <div class="panel-header">agentes</div>
+      <div class="agents">
+        <div class="agent-row"><span class="agent-name">whale-lead</span><div class="agent-bar-bg"><div class="agent-bar agent-bar-purple" id="w-bar-whale" style="width:0%"></div></div><span class="agent-count" id="w-cnt-whale">0</span></div>
+        <div class="agent-row"><span class="agent-name">arbitrage</span><div class="agent-bar-bg"><div class="agent-bar agent-bar-purple" id="w-bar-arb" style="width:0%"></div></div><span class="agent-count" id="w-cnt-arb">0</span></div>
+        <div class="agent-row"><span class="agent-name">convergence</span><div class="agent-bar-bg"><div class="agent-bar agent-bar-purple" id="w-bar-conv" style="width:0%"></div></div><span class="agent-count" id="w-cnt-conv">0</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="cols">
+    <div class="panel"><div class="panel-header">posições abertas <span id="w-open-count">0</span></div><div id="w-open-body"><div class="empty">sem posições abertas</div></div></div>
+    <div class="panel"><div class="panel-header">trades recentes <span id="w-recent-count">0</span></div><div id="w-recent-body"><div class="empty">sem trades ainda</div></div></div>
+  </div>
+  <div style="padding:0 24px 20px;"><div class="panel"><div class="panel-header">log</div><div class="log-panel" id="w-log"></div></div></div>
+</div>
+
+<!-- TAB: COMPARE -->
+<div class="tab-content" id="content-compare">
+  <div style="padding:20px 24px;">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);">
+            <th style="padding:12px 20px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;text-align:left;width:34%;"></th>
+            <th style="padding:12px 20px;font-size:13px;color:var(--green);font-family:var(--mono);text-align:center;width:33%;">scorer-first</th>
+            <th style="padding:12px 20px;font-size:13px;color:var(--purple);font-family:var(--mono);text-align:center;width:33%;">whale-first</th>
+          </tr>
+        </thead>
+        <tbody id="compare-body">
+          <tr><td colspan="3" style="padding:24px;text-align:center;color:var(--muted);">sem dados</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentTab = 'scorer';
+let scorerData = null;
+let whaleData = null;
+let scorerNextCycleAt = null;
+let whaleNextCycleAt  = null;
+
+function switchTab(tab) {
+  currentTab = tab;
+  ['scorer','whale','compare'].forEach(t => {
+    document.getElementById('tab-'+t).className = 'tab';
+    document.getElementById('content-'+t).classList.remove('active');
+  });
+  document.getElementById('tab-'+tab).className = 'tab active-'+tab;
+  document.getElementById('content-'+tab).classList.add('active');
+}
+
+function fmt(n){const s=n>=0?'+':'';return s+'$'+Math.abs(n).toFixed(2);}
+function pnlClass(n){return n>0?'pos':n<0?'neg':'neu';}
+function stars(n){return '★'.repeat(n)+'☆'.repeat(Math.max(0,3-n));}
+
+function renderBot(d, prefix, barClass) {
+  const pnl = d.total_pnl;
+  document.getElementById(prefix+'-pnl').textContent = fmt(pnl);
+  document.getElementById(prefix+'-pnl').className = 'metric-value '+pnlClass(pnl);
+  document.getElementById(prefix+'-trades').textContent = d.total_trades+' trades fechados';
+  document.getElementById(prefix+'-wr').textContent = d.total_trades>0 ? d.win_rate+'%' : '—';
+  document.getElementById(prefix+'-wins').textContent = d.total_trades>0 ? d.wins+' wins / '+(d.total_trades-d.wins)+' loss' : '—';
+  document.getElementById(prefix+'-markets').textContent = d.markets_scored;
+  document.getElementById(prefix+'-markets-sub').textContent = 'de '+d.markets_total+' analisados';
+  document.getElementById(prefix+'-open').textContent = d.open_positions.length;
+  document.getElementById(prefix+'-cycle').textContent = d.cycle;
+  document.getElementById(prefix+'-consensus').textContent = d.consensus_full;
+
+  if (prefix === 's') {
+    document.getElementById('s-arb').textContent = d.signals.arbitrage||0;
+    document.getElementById('s-conv').textContent = d.signals.convergence||0;
+    document.getElementById('s-whale').textContent = d.signals.whale_copy||0;
+    const total = (d.signals.arbitrage||0)+(d.signals.convergence||0)+(d.signals.whale_copy||0)||1;
+    document.getElementById('s-bar-arb').style.width = ((d.signals.arbitrage||0)/total*100)+'%';
+    document.getElementById('s-bar-conv').style.width = ((d.signals.convergence||0)/total*100)+'%';
+    document.getElementById('s-bar-whale').style.width = ((d.signals.whale_copy||0)/total*100)+'%';
+    document.getElementById('s-cnt-arb').textContent = d.signals.arbitrage||0;
+    document.getElementById('s-cnt-conv').textContent = d.signals.convergence||0;
+    document.getElementById('s-cnt-whale').textContent = d.signals.whale_copy||0;
+  } else {
+    document.getElementById('w-whale-pos').textContent = d.signals.whale_lead||'—';
+    const wTotal = (d.signals.whale_lead||0)+(d.signals.arbitrage||0)+(d.signals.convergence||0)||1;
+    document.getElementById('w-bar-whale').style.width = ((d.signals.whale_lead||0)/wTotal*100)+'%';
+    document.getElementById('w-bar-arb').style.width = ((d.signals.arbitrage||0)/wTotal*100)+'%';
+    document.getElementById('w-bar-conv').style.width = ((d.signals.convergence||0)/wTotal*100)+'%';
+    document.getElementById('w-cnt-whale').textContent = d.signals.whale_lead||0;
+    document.getElementById('w-cnt-arb').textContent = d.signals.arbitrage||0;
+    document.getElementById('w-cnt-conv').textContent = d.signals.convergence||0;
+  }
+
+  // Decisões
+  document.getElementById(prefix+'-dec-count').textContent = d.top_decisions.length;
+  if (d.top_decisions.length === 0) {
+    document.getElementById(prefix+'-decisions').innerHTML = '<div class="empty">sem decisões ainda</div>';
+  } else {
+    document.getElementById(prefix+'-decisions').innerHTML = `
+      <table><thead><tr><th>mercado</th><th>side</th><th>cons</th><th>size</th><th>entry</th><th>target</th></tr></thead>
+      <tbody>${d.top_decisions.map(dec => `
+        <tr>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${dec.question}</td>
+          <td><span class="tag ${dec.side==='YES'?'tag-yes':'tag-no'}">${dec.side}</span></td>
+          <td class="stars">${stars(dec.consensus)}</td>
+          <td>$${dec.size}</td><td>${dec.entry}</td><td>${dec.target}</td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  }
+
+  // Posições abertas
+  document.getElementById(prefix+'-open-count').textContent = d.open_positions.length;
+  if (d.open_positions.length === 0) {
+    document.getElementById(prefix+'-open-body').innerHTML = '<div class="empty">sem posições abertas</div>';
+  } else {
+    document.getElementById(prefix+'-open-body').innerHTML = `
+      <table><thead><tr><th>mercado</th><th>side</th><th>entry</th><th>atual</th><th>pnl</th><th>fecha em</th></tr></thead>
+      <tbody>${d.open_positions.map(p => {
+        const soon = p.resolves_in && p.resolves_in.endsWith('h') && parseInt(p.resolves_in) < 6;
+        return `<tr>
+          <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.question}</td>
+          <td><span class="tag ${p.side==='YES'?'tag-yes':'tag-no'}">${p.side}</span></td>
+          <td>${p.entry_price}</td><td>${p.current_price}</td>
+          <td class="${pnlClass(p.pnl)}">${fmt(p.pnl)}</td>
+          <td class="${soon?'resolve-soon':''}" style="color:${soon?'':'var(--muted)'};">${p.resolves_in||'—'}</td>
+        </tr>`;
+      }).join('')}
+      </tbody></table>`;
+  }
+
+  // Trades recentes
+  document.getElementById(prefix+'-recent-count').textContent = d.recent_trades.length;
+  if (d.recent_trades.length === 0) {
+    document.getElementById(prefix+'-recent-body').innerHTML = '<div class="empty">sem trades ainda</div>';
+  } else {
+    document.getElementById(prefix+'-recent-body').innerHTML = `
+      <table><thead><tr><th>mercado</th><th>side</th><th>pnl</th><th>saída</th></tr></thead>
+      <tbody>${d.recent_trades.map(t => `
+        <tr>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.question}</td>
+          <td><span class="tag ${t.side==='YES'?'tag-yes':'tag-no'}">${t.side}</span></td>
+          <td class="${pnlClass(t.pnl)}">${fmt(t.pnl)}</td>
+          <td style="color:var(--muted)">${t.reason}</td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  }
+
+  // Log
+  const logEl = document.getElementById(prefix+'-log');
+  logEl.innerHTML = d.log.slice().reverse().map(line => {
+    const cls = line.includes('ERROR')?'err':line.includes('WARNING')?'warn':line.includes('EXIT')||line.includes('DRY RUN')?'ok':'';
+    return `<div class="log-line ${cls}">${line}</div>`;
+  }).join('');
+}
+
+function renderCompare() {
+  const fields = [
+    {label:'PnL total',         sRaw: scorerData?.total_pnl,     wRaw: whaleData?.total_pnl,     sVal: scorerData ? fmt(scorerData.total_pnl) : '—',                wVal: whaleData ? fmt(whaleData.total_pnl) : '—',                higherIsBetter: true},
+    {label:'Win rate',          sRaw: scorerData?.win_rate,       wRaw: whaleData?.win_rate,       sVal: scorerData?.total_trades>0 ? scorerData.win_rate+'%' : '—', wVal: whaleData?.total_trades>0 ? whaleData.win_rate+'%' : '—', higherIsBetter: true},
+    {label:'Trades fechados',   sRaw: null,                       wRaw: null,                      sVal: scorerData?.total_trades ?? '—',                            wVal: whaleData?.total_trades ?? '—',                           higherIsBetter: false},
+    {label:'Posições abertas',  sRaw: null,                       wRaw: null,                      sVal: scorerData?.open_positions?.length ?? 0,                    wVal: whaleData?.open_positions?.length ?? 0,                   higherIsBetter: false},
+    {label:'Mercados com edge', sRaw: scorerData?.markets_scored, wRaw: whaleData?.markets_scored, sVal: scorerData?.markets_scored ?? '—',                          wVal: whaleData?.markets_scored ?? '—',                         higherIsBetter: true},
+    {label:'Ciclo',             sRaw: null,                       wRaw: null,                      sVal: scorerData?.cycle ?? '—',                                   wVal: whaleData?.cycle ?? '—',                                  higherIsBetter: false},
+  ];
+
+    const rows = fields.map(f => {
+    const sWin = f.higherIsBetter && f.sRaw != null && f.wRaw != null && f.sRaw > f.wRaw;
+    const wWin = f.higherIsBetter && f.sRaw != null && f.wRaw != null && f.wRaw > f.sRaw;
+    return `<tr>
+      <td style="padding:12px 20px;color:var(--muted);border-bottom:1px solid var(--border);font-size:12px;">${f.label}</td>
+      <td style="padding:12px 20px;text-align:center;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:13px;${sWin?'color:var(--green);font-weight:500;':''}">${f.sVal}</td>
+      <td style="padding:12px 20px;text-align:center;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:13px;${wWin?'color:var(--green);font-weight:500;':''}">${f.wVal}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('compare-body').innerHTML = rows;
+}
+
+async function fetchData() {
+  // Scorer bot
+  try {
+    const r = await fetch('dashboard_data.json?t='+Date.now());
+    if (r.ok) {
+      scorerData = await r.json();
+      renderBot(scorerData, 's', 'green');
+      const ua = new Date(scorerData.updated_at);
+      document.getElementById('status-scorer').textContent = 'scorer · '+ua.toLocaleTimeString('pt-PT');
+      document.getElementById('dot-scorer').className = 'dot dot-green';
+      scorerNextCycleAt = d.next_cycle_at ? new Date(d.next_cycle_at) : null;
+    }
+  } catch(e) {
+    document.getElementById('status-scorer').textContent = 'scorer · offline';
+    document.getElementById('dot-scorer').className = 'dot dot-grey';
+  }
+
+  // Whale bot
+  try {
+    const r = await fetch('dashboard_data_whale.json?t='+Date.now());
+    if (r.ok) {
+      whaleData = await r.json();
+      renderBot(whaleData, 'w', 'purple');
+      const ua = new Date(whaleData.updated_at);
+      document.getElementById('status-whale').textContent = 'whale-first · '+ua.toLocaleTimeString('pt-PT');
+      document.getElementById('dot-whale').className = 'dot dot-purple';
+      whaleNextCycleAt = d.next_cycle_at ? new Date(d.next_cycle_at) : null;
+    }
+  } catch(e) {
+    document.getElementById('status-whale').textContent = 'whale-first · offline';
+    document.getElementById('dot-whale').className = 'dot dot-grey';
+  }
+
+  if (scorerData || whaleData) renderCompare();
+}
+
+setInterval(() => {
+  const now = new Date();
+  if (scorerNextCycleAt) {
+    const secs = Math.max(0, Math.floor((scorerNextCycleAt - now) / 1000));
+    const m = Math.floor(secs/60), s = secs%60;
+    document.getElementById('s-next').textContent = secs > 0
+      ? 'próximo ciclo em '+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')
+      : 'a iniciar ciclo...';
+  }
+  if (whaleNextCycleAt) {
+    const secs = Math.max(0, Math.floor((whaleNextCycleAt - now) / 1000));
+    const m = Math.floor(secs/60), s = secs%60;
+    document.getElementById('w-next').textContent = secs > 0
+      ? 'próximo ciclo em '+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')
+      : 'a iniciar ciclo...';
+  }
+}, 1000);
+
+fetchData();
+setInterval(fetchData, 30000);
+</script>
+</body>
+</html>
