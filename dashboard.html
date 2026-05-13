@@ -107,6 +107,9 @@
       <div class="dot dot-purple" id="dot-whale"></div>
       <span id="status-whale">whale-first · —</span>
     </div>
+    <div style="display:flex;gap:8px;margin-left:12px;">
+      <button id="btn-pause" onclick="togglePause()" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text);cursor:pointer;">⏸ pausar</button>
+    </div>
   </div>
 </header>
 
@@ -399,8 +402,46 @@ setInterval(() => {
   }
 }, 1000);
 
+let isPaused = false;
+
+async function togglePause() {
+  const endpoint = isPaused ? '/resume' : '/pause';
+  try {
+    const r = await fetch(endpoint, {method: 'POST'});
+    const d = await r.json();
+    isPaused = d.paused;
+    updatePauseBtn();
+  } catch(e) {
+    console.error('Erro ao comunicar com o servidor:', e);
+  }
+}
+
+function updatePauseBtn() {
+  const btn = document.getElementById('btn-pause');
+  if (isPaused) {
+    btn.textContent = '▶ retomar';
+    btn.style.color = 'var(--yellow)';
+    btn.style.borderColor = 'var(--yellow)';
+  } else {
+    btn.textContent = '⏸ pausar';
+    btn.style.color = 'var(--text)';
+    btn.style.borderColor = 'var(--border2)';
+  }
+}
+
+async function checkPauseStatus() {
+  try {
+    const r = await fetch('/status');
+    const d = await r.json();
+    isPaused = d.paused;
+    updatePauseBtn();
+  } catch(e) {}
+}
+
 fetchData();
+checkPauseStatus();
 setInterval(fetchData, 30000);
+setInterval(checkPauseStatus, 10000);
 </script>
 </body>
 </html>

@@ -21,6 +21,7 @@ from execution.executor     import Executor
 from execution.exit_manager import ExitManager
 from portfolio              import Portfolio
 from dashboard_writer       import write as write_dashboard
+from server                 import start_server, is_paused
 
 logging.basicConfig(
     level   = logging.INFO,
@@ -183,6 +184,9 @@ async def main():
     console.print("[bold]PolyBot v1.0[/bold] — a iniciar…")
     console.print(f"Modo: {'[yellow]DRY RUN[/yellow]' if DRY_RUN else '[red]LIVE[/red]'}")
 
+    # Inicia servidor HTTP para dashboard
+    start_server()
+
     executor     = Executor(
         private_key    = POLY_PRIVATE_KEY,
         api_key        = POLY_API_KEY,
@@ -195,10 +199,13 @@ async def main():
     exit_manager = ExitManager(executor)
 
     while True:
-        try:
-            await run_cycle(portfolio, executor, exit_manager)
-        except Exception as e:
-            log.error(f"Erro no ciclo: {e}", exc_info=True)
+        if is_paused():
+            log.info("Bot em pausa — aguarda retoma via dashboard.")
+        else:
+            try:
+                await run_cycle(portfolio, executor, exit_manager)
+            except Exception as e:
+                log.error(f"Erro no ciclo: {e}", exc_info=True)
 
         log.info(f"A aguardar {RUN_INTERVAL_MINS} minutos…\n")
         await asyncio.sleep(RUN_INTERVAL_MINS * 60)
