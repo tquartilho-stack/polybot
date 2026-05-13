@@ -1,0 +1,8 @@
+﻿.env
+venv/
+__pycache__/
+*.pyc
+dashboard_data.json
+dashboard_data_whale.json
+portfolio_state.json
+portfolio_state_whale.json
