@@ -100,9 +100,15 @@ class Executor:
         try:
             market_data = self.clob.get_market(condition_id)
             tokens      = market_data.get("tokens", [])
+            # Tenta encontrar YES/NO explícito
             for t in tokens:
                 if t.get("outcome", "").upper() == side.value:
                     return t["token_id"]
+            # Mercados com nomes de equipas: YES=primeiro token, NO=segundo
+            if tokens:
+                idx = 0 if side == Side.YES else 1
+                if idx < len(tokens):
+                    return tokens[idx]["token_id"]
         except Exception as e:
             log.error(f"Erro ao obter token_id: {e}")
         return None
