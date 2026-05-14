@@ -27,6 +27,7 @@ from execution.exit_manager import ExitManager
 from portfolio              import Portfolio
 from dashboard_writer       import write as write_scorer_dashboard
 from server                 import start_server, is_paused, is_started, is_paused_whale, is_started_whale
+from reconcile              import reconcile_portfolio
 from pathlib import Path
 import json
 
@@ -222,6 +223,9 @@ async def scorer_loop(executor, portfolio, exit_manager):
             console.print(f"[bold cyan]{portfolio.summary()}")
             _write_dashboard(DATA_DIR / "dashboard_data.json", _scorer_cycle, len(all_markets), len(scored), signals, consensus_full, decisions, portfolio, list(_log_buffer_scorer))
 
+            # Reconcilia com Polymarket após cada ciclo
+            await reconcile_portfolio(portfolio, POLY_PROXY_ADDRESS, "SCORER")
+
         except Exception as e:
             log.error(f"[SCORER] Erro: {e}", exc_info=True)
 
@@ -361,6 +365,9 @@ async def whale_loop(executor, portfolio, exit_manager):
 
             console.print(f"[bold purple]{portfolio.summary()}")
             _write_dashboard(DATA_DIR / "dashboard_data_whale.json", _whale_cycle, len(candidates), len(scored), signals, consensus_full, decisions, portfolio, list(_log_buffer_whale))
+
+            # Reconcilia com Polymarket após cada ciclo
+            await reconcile_portfolio(portfolio, POLY_PROXY_ADDRESS, "WHALE")
 
         except Exception as e:
             log.error(f"[WHALE] Erro: {e}", exc_info=True)
