@@ -47,7 +47,32 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path == "/pause":
+
+        if path == "/upload-portfolio":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            try:
+                data = json.loads(body)
+                target = DATA_DIR / "portfolio_state.json"
+                target.write_text(json.dumps(data, indent=2, ensure_ascii=True), encoding="utf-8")
+                log.info("[UPLOAD] portfolio_state.json actualizado")
+                self._json({"ok": True, "positions": len(data.get("positions", []))})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
+
+        elif path == "/upload-portfolio-whale":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            try:
+                data = json.loads(body)
+                target = DATA_DIR / "portfolio_state_whale.json"
+                target.write_text(json.dumps(data, indent=2, ensure_ascii=True), encoding="utf-8")
+                log.info("[UPLOAD] portfolio_state_whale.json actualizado")
+                self._json({"ok": True, "positions": len(data.get("positions", []))})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
+
+        elif path == "/pause":
             PAUSE_FILE.write_text("paused")
             log.info("[DASHBOARD] Bot pausado")
             self._json({"paused": True, "started": STARTED_FILE.exists()})

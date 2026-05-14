@@ -118,7 +118,7 @@ class ExitManager:
         )
 
     async def _sell_position(self, pos: OpenPosition, exit_price: float):
-        """Coloca ordem SELL para fechar a posição."""
+        """Coloca ordem SELL de mercado para execução imediata."""
         try:
             from py_clob_client_v2.clob_types import OrderArgsV2
 
@@ -129,15 +129,28 @@ class ExitManager:
 
             shares = round(pos.size_usdc / pos.entry_price, 2)
 
-            order_args = OrderArgsV2(
-                token_id = token_id,
-                price    = exit_price,
-                size     = shares,
-                side     = "SELL",
-            )
-
-            result = self.executor.clob.create_and_post_order(order_args)
-            log.info(f"Ordem SELL colocada: {pos.trade_id} — {result}")
+            # Usa create_and_post_market_order para execução imediata
+            try:
+                result = self.executor.clob.create_and_post_market_order(
+                    OrderArgsV2(
+                        token_id = token_id,
+                        price    = exit_price,
+                        size     = shares,
+                        side     = "SELL",
+                    )
+                )
+                log.info(f"Ordem SELL mercado: {pos.trade_id} — {result}")
+            except Exception:
+                # Fallback para ordem limite agressiva (5% abaixo do mercado)
+                aggressive_price = round(max(exit_price * 0.95, 0.01), 3)
+                order_args = OrderArgsV2(
+                    token_id = token_id,
+                    price    = aggressive_price,
+                    size     = shares,
+                    side     = "SELL",
+                )
+                result = self.executor.clob.create_and_post_order(order_args)
+                log.info(f"Ordem SELL limite agressiva @ {aggressive_price}: {pos.trade_id} — {result}")
 
         except Exception as e:
             log.error(f"Erro ao vender {pos.trade_id}: {e}")
