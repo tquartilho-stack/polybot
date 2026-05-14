@@ -17,6 +17,8 @@ DASHBOARD_DATA  = DATA_DIR / "dashboard_data.json"
 DASHBOARD_WHALE = DATA_DIR / "dashboard_data_whale.json"
 PAUSE_FILE      = DATA_DIR / "PAUSE"
 STARTED_FILE    = DATA_DIR / "STARTED"
+PAUSE_FILE_WHALE   = DATA_DIR / "PAUSE_WHALE"
+STARTED_FILE_WHALE = DATA_DIR / "STARTED_WHALE"
 PORT = 8080
 
 
@@ -33,7 +35,12 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/dashboard_data_whale.json":
             self._serve_file(DASHBOARD_WHALE, "application/json")
         elif path == "/status":
-            self._json({"paused": PAUSE_FILE.exists(), "started": STARTED_FILE.exists()})
+            self._json({
+                "paused":        PAUSE_FILE.exists(),
+                "started":       STARTED_FILE.exists(),
+                "paused_whale":  PAUSE_FILE_WHALE.exists(),
+                "started_whale": STARTED_FILE_WHALE.exists(),
+            })
         else:
             self.send_response(404)
             self.end_headers()
@@ -60,6 +67,26 @@ class Handler(BaseHTTPRequestHandler):
                 STARTED_FILE.unlink()
             log.info("[DASHBOARD] Bot parado via dashboard")
             self._json({"paused": False, "started": False})
+        elif path == "/start-whale":
+            STARTED_FILE_WHALE.write_text("started")
+            if PAUSE_FILE_WHALE.exists():
+                PAUSE_FILE_WHALE.unlink()
+            log.info("[DASHBOARD] Whale iniciado via dashboard")
+            self._json({"started_whale": True, "paused_whale": False})
+        elif path == "/pause-whale":
+            PAUSE_FILE_WHALE.write_text("paused")
+            log.info("[DASHBOARD] Whale pausado")
+            self._json({"started_whale": True, "paused_whale": True})
+        elif path == "/resume-whale":
+            if PAUSE_FILE_WHALE.exists():
+                PAUSE_FILE_WHALE.unlink()
+            log.info("[DASHBOARD] Whale retomado")
+            self._json({"started_whale": True, "paused_whale": False})
+        elif path == "/stop-whale":
+            if STARTED_FILE_WHALE.exists():
+                STARTED_FILE_WHALE.unlink()
+            log.info("[DASHBOARD] Whale parado via dashboard")
+            self._json({"started_whale": False, "paused_whale": False})
         else:
             self.send_response(404)
             self.end_headers()

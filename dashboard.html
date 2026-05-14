@@ -107,11 +107,6 @@
       <div class="dot dot-purple" id="dot-whale"></div>
       <span id="status-whale">whale-first · —</span>
     </div>
-    <div style="display:flex;gap:6px;margin-left:12px;">
-      <button id="btn-start" onclick="handleStart()" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--green);background:var(--surface);color:var(--green);cursor:pointer;">▶ start</button>
-      <button id="btn-pause" onclick="handlePause()" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--muted);cursor:pointer;">⏸ pausar</button>
-      <button id="btn-stop" onclick="handleStop()" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--red);background:var(--surface);color:var(--red);cursor:pointer;">⏹ stop</button>
-    </div>
   </div>
 </header>
 
@@ -129,6 +124,11 @@
 
 <!-- TAB: SCORER -->
 <div class="tab-content active" id="content-scorer">
+  <div style="display:flex;justify-content:flex-end;gap:6px;padding:12px 24px 0;">
+    <button id="s-btn-start" onclick="handleStart('scorer')" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--green);background:var(--surface);color:var(--green);cursor:pointer;">▶ start</button>
+    <button id="s-btn-pause" onclick="handlePause('scorer')" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--muted);cursor:pointer;">⏸ pausar</button>
+    <button id="s-btn-stop" onclick="handleStop('scorer')" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--red);background:var(--surface);color:var(--red);cursor:pointer;">⏹ stop</button>
+  </div>
   <div class="grid">
     <div class="metric"><div class="metric-label">PnL simulado</div><div class="metric-value" id="s-pnl">$0.00</div><div class="metric-sub" id="s-trades">0 trades</div></div>
     <div class="metric"><div class="metric-label">Win rate</div><div class="metric-value" id="s-wr">—</div><div class="metric-sub" id="s-wins">—</div></div>
@@ -160,6 +160,11 @@
 
 <!-- TAB: WHALE -->
 <div class="tab-content" id="content-whale">
+  <div style="display:flex;justify-content:flex-end;gap:6px;padding:12px 24px 0;">
+    <button id="w-btn-start" onclick="handleStart('whale')" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--purple);background:var(--surface);color:var(--purple);cursor:pointer;">▶ start</button>
+    <button id="w-btn-pause" onclick="handlePause('whale')" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--muted);cursor:pointer;">⏸ pausar</button>
+    <button id="w-btn-stop" onclick="handleStop('whale')" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--red);background:var(--surface);color:var(--red);cursor:pointer;">⏹ stop</button>
+  </div>
   <div class="grid">
     <div class="metric"><div class="metric-label">PnL simulado</div><div class="metric-value" id="w-pnl">$0.00</div><div class="metric-sub" id="w-trades">0 trades</div></div>
     <div class="metric"><div class="metric-label">Win rate</div><div class="metric-value" id="w-wr">—</div><div class="metric-sub" id="w-wins">—</div></div>
@@ -404,48 +409,54 @@ setInterval(() => {
   }
 }, 1000);
 
-let isPaused  = false;
-let isStarted = false;
+let scorerState = {started: false, paused: false};
+let whaleState  = {started: false, paused: false};
 
-async function handleStart() {
-  await fetch('/start', {method: 'POST'});
+const ENDPOINTS = {
+  scorer: {start: '/start',       pause: '/pause',       resume: '/resume',       stop: '/stop'},
+  whale:  {start: '/start-whale', pause: '/pause-whale', resume: '/resume-whale', stop: '/stop-whale'},
+};
+
+async function handleStart(bot) {
+  await fetch(ENDPOINTS[bot].start, {method: 'POST'});
   await checkPauseStatus();
 }
 
-async function handlePause() {
-  const endpoint = isPaused ? '/resume' : '/pause';
-  await fetch(endpoint, {method: 'POST'});
+async function handlePause(bot) {
+  const state = bot === 'scorer' ? scorerState : whaleState;
+  const ep = state.paused ? ENDPOINTS[bot].resume : ENDPOINTS[bot].pause;
+  await fetch(ep, {method: 'POST'});
   await checkPauseStatus();
 }
 
-async function handleStop() {
-  await fetch('/stop', {method: 'POST'});
+async function handleStop(bot) {
+  await fetch(ENDPOINTS[bot].stop, {method: 'POST'});
   await checkPauseStatus();
 }
 
-function updateButtons() {
-  const btnStart = document.getElementById('btn-start');
-  const btnPause = document.getElementById('btn-pause');
-  const btnStop  = document.getElementById('btn-stop');
+function updateButtons(bot, state) {
+  const prefix = bot === 'scorer' ? 's' : 'w';
+  const btnStart = document.getElementById(`${prefix}-btn-start`);
+  const btnPause = document.getElementById(`${prefix}-btn-pause`);
+  const btnStop  = document.getElementById(`${prefix}-btn-stop`);
+  if (!btnStart) return;
 
-  if (!isStarted) {
-    btnStart.style.opacity = '1';
+  const accentColor = bot === 'scorer' ? 'var(--green)' : 'var(--purple)';
+
+  if (!state.started) {
+    btnStart.style.opacity = '1'; btnStart.style.borderColor = accentColor; btnStart.style.color = accentColor;
     btnPause.style.opacity = '0.3';
     btnStop.style.opacity  = '0.3';
-    btnPause.textContent   = '⏸ pausar';
-  } else if (isPaused) {
+    btnPause.textContent = '⏸ pausar';
+  } else if (state.paused) {
     btnStart.style.opacity = '0.3';
-    btnPause.style.opacity = '1';
-    btnPause.textContent   = '▶ retomar';
-    btnPause.style.color   = 'var(--yellow)';
-    btnPause.style.borderColor = 'var(--yellow)';
+    btnPause.style.opacity = '1'; btnPause.style.color = 'var(--yellow)'; btnPause.style.borderColor = 'var(--yellow)';
+    btnPause.textContent = '▶ retomar';
     btnStop.style.opacity  = '1';
   } else {
     btnStart.style.opacity = '0.3';
-    btnPause.style.opacity = '1';
-    btnPause.textContent   = '⏸ pausar';
-    btnPause.style.color   = 'var(--muted)';
-    btnPause.style.borderColor = 'var(--border2)';
+    btnPause.style.opacity = '1'; btnPause.style.color = 'var(--muted)'; btnPause.style.borderColor = 'var(--border2)';
+    btnPause.textContent = '⏸ pausar';
     btnStop.style.opacity  = '1';
   }
 }
@@ -454,9 +465,10 @@ async function checkPauseStatus() {
   try {
     const r = await fetch('/status');
     const d = await r.json();
-    isPaused  = d.paused;
-    isStarted = d.started;
-    updateButtons();
+    scorerState = {started: d.started,       paused: d.paused};
+    whaleState  = {started: d.started_whale, paused: d.paused_whale};
+    updateButtons('scorer', scorerState);
+    updateButtons('whale',  whaleState);
   } catch(e) {}
 }
 

@@ -4,11 +4,10 @@ import logging
 from datetime import datetime, date, timezone
 from pathlib import Path
 
-from data.models import OpenPosition, TradeResult, Side
+from data.models import OpenPosition, TradeResult, Side, Market
 
 log = logging.getLogger(__name__)
 
-# Usa /data se existir (Railway Volume), senão pasta local
 DATA_DIR   = Path("/data") if Path("/data").exists() else Path(".")
 STATE_FILE = DATA_DIR / "portfolio_state.json"
 
@@ -68,6 +67,7 @@ class Portfolio:
         try:
             self.state_file.write_text(json.dumps({
                 "daily_count": self._daily_count,
+                "positions":   [self._position_to_dict(p) for p in self.positions],
                 "history":     [self._result_to_dict(r) for r in self.history],
             }, indent=2), encoding="utf-8")
         except Exception as e:
@@ -79,6 +79,16 @@ class Portfolio:
         try:
             data = json.loads(self.state_file.read_text(encoding="utf-8"))
             self._daily_count = data.get("daily_count", {})
+
+            # Carrega posições abertas
+            for p in data.get("positions", []):
+                try:
+                    self.positions.append(self._dict_to_position(p))
+                except Exception as e:
+                    log.warning(f"Erro ao carregar posição: {e}")
+                    continue
+
+            # Carrega histórico
             for r in data.get("history", []):
                 try:
                     self.history.append(TradeResult(
@@ -95,8 +105,59 @@ class Portfolio:
                     ))
                 except Exception:
                     continue
-        except Exception:
-            pass
+
+            if self.positions:
+                log.info(f"Portfolio carregado: {len(self.positions)} posições abertas, {len(self.history)} trades fechados")
+
+        except Exception as e:
+            log.warning(f"Erro ao carregar portfolio: {e}")
+
+    def _position_to_dict(self, p: OpenPosition) -> dict:
+        return {
+            "trade_id":       p.trade_id,
+            "condition_id":   p.market.condition_id,
+            "question":       p.market.question,
+            "yes_price":      p.market.yes_price,
+            "no_price":       p.market.no_price,
+            "volume_usdc":    p.market.volume_usdc,
+            "liquidity_usdc": p.market.liquidity_usdc,
+            "spread":         p.market.spread,
+            "resolves_at":    p.market.resolves_at.isoformat(),
+            "hours_to_resolve": p.market.hours_to_resolve,
+            "side":           p.side.value,
+            "size_usdc":      p.size_usdc,
+            "entry_price":    p.entry_price,
+            "entry_time":     p.entry_time.isoformat(),
+            "target_exit":    p.target_exit,
+            "current_price":  p.current_price,
+            "peak_price":     p.peak_price,
+            "volume_baseline":p.volume_baseline,
+        }
+
+    def _dict_to_position(self, d: dict) -> OpenPosition:
+        market = Market(
+            condition_id     = d["condition_id"],
+            question         = d["question"],
+            yes_price        = d["yes_price"],
+            no_price         = d["no_price"],
+            volume_usdc      = d["volume_usdc"],
+            liquidity_usdc   = d["liquidity_usdc"],
+            spread           = d["spread"],
+            resolves_at      = datetime.fromisoformat(d["resolves_at"]),
+            hours_to_resolve = d["hours_to_resolve"],
+        )
+        return OpenPosition(
+            trade_id        = d["trade_id"],
+            market          = market,
+            side            = Side(d["side"]),
+            size_usdc       = d["size_usdc"],
+            entry_price     = d["entry_price"],
+            entry_time      = datetime.fromisoformat(d["entry_time"]),
+            target_exit     = d["target_exit"],
+            current_price   = d.get("current_price", d["entry_price"]),
+            peak_price      = d.get("peak_price", d["entry_price"]),
+            volume_baseline = d.get("volume_baseline", 0),
+        )
 
     def _result_to_dict(self, r: TradeResult) -> dict:
         return {

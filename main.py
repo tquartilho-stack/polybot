@@ -198,6 +198,11 @@ async def main():
     portfolio    = Portfolio(max_open=MAX_OPEN_POSITIONS, max_daily=MAX_DAILY_TRADES)
     exit_manager = ExitManager(executor)
 
+    # Se há posições carregadas do disco, lança o exit manager imediatamente
+    if portfolio.positions:
+        log.info(f"Posições carregadas do disco: {len(portfolio.positions)} — a lançar exit manager...")
+        asyncio.create_task(_exit_background(portfolio, exit_manager))
+
     while True:
         if not is_started():
             log.info("Bot em standby — aguarda Start no dashboard.")
