@@ -21,17 +21,12 @@ class ExitManager:
 
     async def monitor_loop(self, positions: list[OpenPosition]) -> list[TradeResult]:
         new_results: list[TradeResult] = []
-        poll_count: dict[str, int] = {p.trade_id: 0 for p in positions}
 
         async with httpx.AsyncClient() as http:
             while positions:
                 to_close: list[tuple[OpenPosition, str]] = []
 
                 for pos in positions:
-                    poll_count[pos.trade_id] = poll_count.get(pos.trade_id, 0) + 1
-                    if poll_count[pos.trade_id] >= MAX_POLLS:
-                        to_close.append((pos, "timeout"))
-                        continue
                     try:
                         exit_reason = await self._check_exit(pos, http)
                         if exit_reason:

@@ -47,7 +47,7 @@ def build_consensus(all_signals: list[AgentSignal]) -> list[TradeDecision]:
 
         # Target de saída: 85% do movimento até 1.0
         # Ex: preço actual 0.60 → move até 1.0 → 85% desse move = 0.60 + 0.85*(0.40) = 0.94
-        target_exit = current + 0.85 * (1.0 - current)
+        target_exit = entry_price + 0.85 * (1.0 - entry_price)
 
         if n >= CONSENSUS_THRESHOLD:
             size = FULL_SIZE_USDC
