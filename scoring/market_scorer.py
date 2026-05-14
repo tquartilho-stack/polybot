@@ -1,13 +1,9 @@
 """
 scoring/market_scorer.py — usa Claude para pontuar mercados.
 
-Claude recebe batches de mercados pré-filtrados e devolve:
-  - score 0-10
-  - razão em 1 linha
-  - side recomendado (YES/NO/SKIP)
-
-Ao contrário do que o post no Twitter implica, Claude não faz I/O de dados —
-é o motor de raciocínio sobre dados já puxados pelas APIs.
+Pipeline de dois estágios:
+  1. Haiku pre-filtro: descarta mercados óbvios (score < 5) a baixo custo
+  2. Sonnet scoring fino: analisa só os sobreviventes com profundidade
 """
 from __future__ import annotations
 import asyncio
@@ -24,10 +20,26 @@ log = logging.getLogger(__name__)
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-BATCH_SIZE = 20  # mercados por chamada ao Claude
+HAIKU_MODEL    = "claude-haiku-4-5-20251001"
+BATCH_SIZE     = 50   # mercados por chamada ao Haiku (pre-filtro)
+SONNET_BATCH   = 20   # mercados por chamada ao Sonnet (scoring fino)
+HAIKU_THRESHOLD = 4.0  # score mínimo para passar ao Sonnet
 
 
-# ── System prompt ────────────────────────────────────────────────────────────
+# ── System prompts ────────────────────────────────────────────────────────────
+
+PREFILTER_PROMPT = """És um filtro rápido de mercados de predição do Polymarket.
+Descarta mercados sem edge óbvio. Sê conservador — mantém os que têm potencial.
+
+Devolve EXCLUSIVAMENTE um array JSON sem markdown:
+[{"condition_id": "...", "score": 6.5, "keep": true}]
+
+score: 0-10. keep: true se score >= 4 e vale análise mais profunda.
+Critérios rápidos de descarte (keep: false):
+- Preço muito próximo de 0 ou 1 (sem edge)
+- Liquidez < 1000 USDC
+- Resolve em menos de 2 horas
+- Mercado trivialmente óbvio"""
 
 SYSTEM_PROMPT = """És um analista de mercados de predição especializado no Polymarket.
 Recebes uma lista de mercados binários (YES/NO) com os seus dados e tens de os pontuar.
@@ -52,7 +64,7 @@ side: "YES", "NO", ou "SKIP" (se não houver edge claro)
 reason: máximo 15 palavras"""
 
 
-# ── Scoring ──────────────────────────────────────────────────────────────────
+# ── Utils ─────────────────────────────────────────────────────────────────────
 
 def _market_to_dict(m: Market) -> dict[str, Any]:
     return {
@@ -67,8 +79,52 @@ def _market_to_dict(m: Market) -> dict[str, Any]:
     }
 
 
+def _parse_json(raw: str) -> list[dict]:
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    return json.loads(raw)
+
+
+# ── Stage 1: Haiku pre-filtro ─────────────────────────────────────────────────
+
+def _prefilter_batch(markets: list[Market]) -> list[Market]:
+    """Usa Haiku para descartar mercados sem edge óbvio."""
+    payload = json.dumps([_market_to_dict(m) for m in markets], ensure_ascii=False)
+
+    message = client.messages.create(
+        model      = HAIKU_MODEL,
+        max_tokens = 2000,
+        system     = PREFILTER_PROMPT,
+        messages   = [{"role": "user", "content": payload}],
+    )
+
+    results = _parse_json(message.content[0].text)
+    keep_ids = {r["condition_id"] for r in results if r.get("keep", False)}
+    kept = [m for m in markets if m.condition_id in keep_ids]
+    log.info(f"[HAIKU] {len(markets)} → {len(kept)} mercados após pre-filtro")
+    return kept
+
+
+def prefilter_markets(markets: list[Market]) -> list[Market]:
+    """Corre pre-filtro Haiku em batches."""
+    survivors = []
+    for i in range(0, len(markets), BATCH_SIZE):
+        batch = markets[i : i + BATCH_SIZE]
+        try:
+            survivors.extend(_prefilter_batch(batch))
+        except Exception as e:
+            log.error(f"Erro no pre-filtro batch {i//BATCH_SIZE}: {e}")
+            survivors.extend(batch)  # em caso de erro, passa tudo ao Sonnet
+    return survivors
+
+
+# ── Stage 2: Sonnet scoring fino ──────────────────────────────────────────────
+
 def _score_batch(markets: list[Market]) -> list[dict]:
-    """Chama Claude para pontuar um batch de mercados."""
+    """Chama Sonnet para pontuar um batch de mercados."""
     payload = json.dumps([_market_to_dict(m) for m in markets], ensure_ascii=False)
 
     message = client.messages.create(
@@ -78,28 +134,31 @@ def _score_batch(markets: list[Market]) -> list[dict]:
         messages   = [{"role": "user", "content": payload}],
     )
 
-    raw = message.content[0].text.strip()
-    # Remove possíveis backticks se o modelo se enganar
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    return json.loads(raw)
+    return _parse_json(message.content[0].text)
 
 
 def score_markets(markets: list[Market], min_score: float = 6.0) -> list[Market]:
     """
-    Pega lista de mercados, envia em batches ao Claude, aplica scores.
-    Devolve apenas os mercados com score >= min_score e side != SKIP.
+    Pipeline de dois estágios:
+    1. Haiku descarta mercados óbvios sem edge
+    2. Sonnet faz scoring fino dos sobreviventes
     """
+    # Stage 1: pre-filtro Haiku
+    candidates = prefilter_markets(markets)
+    log.info(f"[SCORER] Pre-filtro: {len(markets)} → {len(candidates)} candidatos para Sonnet")
+
+    if not candidates:
+        return []
+
+    # Stage 2: Sonnet scoring fino
     scored: list[Market] = []
 
-    for i in range(0, len(markets), BATCH_SIZE):
-        batch = markets[i : i + BATCH_SIZE]
+    for i in range(0, len(candidates), SONNET_BATCH):
+        batch = candidates[i : i + SONNET_BATCH]
         try:
             results = _score_batch(batch)
         except Exception as e:
-            log.error(f"Erro no batch {i//BATCH_SIZE}: {e}")
+            log.error(f"Erro no batch Sonnet {i//SONNET_BATCH}: {e}")
             continue
 
         result_map = {r["condition_id"]: r for r in results}
@@ -107,21 +166,20 @@ def score_markets(markets: list[Market], min_score: float = 6.0) -> list[Market]
             r = result_map.get(m.condition_id)
             if not r:
                 continue
-            m.score       = r.get("score", 0)
-            m.score_reason= r.get("reason", "")
-            side          = r.get("side", "SKIP")
+            m.score        = r.get("score", 0)
+            m.score_reason = r.get("reason", "")
+            side           = r.get("side", "SKIP")
 
             if m.score >= min_score and side != "SKIP":
-                # Guardamos o side recomendado no score_reason para os agentes lerem
                 m.score_reason = f"[{side}] {m.score_reason}"
                 scored.append(m)
 
     scored.sort(key=lambda m: m.score, reverse=True)
-    log.info(f"Scorer: {len(markets)} → {len(scored)} mercados com edge")
+    log.info(f"[SCORER] Sonnet: {len(candidates)} → {len(scored)} mercados com edge")
     return scored
 
 
-# ── Entry point ──────────────────────────────────────────────────────────────
+# ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     from data.fetcher import get_filtered_markets
@@ -131,6 +189,6 @@ if __name__ == "__main__":
     print(f"Mercados após filtro API: {len(markets)}")
 
     top = score_markets(markets)
-    print(f"\nTop mercados após Claude scorer ({len(top)}):\n")
+    print(f"\nTop mercados após scorer ({len(top)}):\n")
     for m in top[:8]:
         print(f"  [{m.score:.1f}] {m.question[:55]:<55}  {m.score_reason[:50]}")

@@ -27,15 +27,15 @@ TOP_N_WALLETS       = 50           # top wallets a trackear
 WALLET_LOOKBACK_DAYS= 90           # dias de histórico a analisar
 
 # ── Market scorer ───────────────────────────────────────────────────────────
-MAX_MARKETS_TO_SCORE= 250          # mercados a puxar da API antes de filtrar
+MAX_MARKETS_TO_SCORE= 500          # mercados a puxar da API antes de filtrar
 MIN_LIQUIDITY_USDC  = 1_000        # liquidez mínima em USDC
 MAX_SPREAD_PCT      = 0.08         # spread máximo (8 cents num mercado 0-1)
 MIN_HOURS_TO_RESOLVE= 2            # mercados com resolução > 2h
-MAX_HOURS_TO_RESOLVE= 168           # e < 72h são os mais interessantes
+MAX_HOURS_TO_RESOLVE= 72           # e < 72h são os mais interessantes
 
 # ── Consensus & sizing ──────────────────────────────────────────────────────
-FULL_SIZE_USDC      = 20.0         # tamanho de posição completa
-HALF_SIZE_USDC      = 10.0         # tamanho quando só 1 agente concorda
+FULL_SIZE_USDC      = 50.0         # tamanho de posição completa
+HALF_SIZE_USDC      = 25.0         # tamanho quando só 1 agente concorda
 CONSENSUS_THRESHOLD = 2            # mínimo de agentes para full size
 
 # ── Exit manager ────────────────────────────────────────────────────────────
@@ -45,7 +45,8 @@ POLL_INTERVAL_SECS  = 60           # frequência de verificação de posições 
 
 # ── Loop principal ──────────────────────────────────────────────────────────
 RUN_INTERVAL_MINS   = 30           # corre o bot de 30 em 30 minutos
-MAX_OPEN_POSITIONS  = 20           # máximo de posições abertas simultâneas
-MAX_DAILY_TRADES    = 100           # travão diário
+MAX_OPEN_POSITIONS  = 10           # máximo de posições abertas simultâneas
+MAX_DAILY_TRADES    = 15           # travão diário
 
-CLAUDE_MODEL        = "claude-sonnet-4-6"
+CLAUDE_MODEL        = "claude-sonnet-4-20250514"
+CLAUDE_HAIKU_MODEL  = "claude-haiku-4-5-20251001"
