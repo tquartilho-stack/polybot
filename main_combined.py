@@ -46,6 +46,10 @@ DATA_DIR = Path("/data") if Path("/data").exists() else Path(".")
 _wallet_cache = {"data": [], "last_update": 0.0}
 WALLET_CACHE_TTL = 6 * 3600
 
+# Scoring cache partilhado — scorer partilha resultados com whale
+_scoring_cache = {"markets": [], "last_update": 0.0}
+SCORING_CACHE_TTL = 25 * 60  # 25 minutos (ligeiramente menos que o ciclo de 30min)
+
 _log_buffer_scorer: list[str] = []
 _log_buffer_whale:  list[str] = []
 
@@ -197,6 +201,11 @@ async def scorer_loop(executor, portfolio, exit_manager):
 
             all_markets = await get_filtered_markets()
             scored      = score_markets(all_markets)
+
+            # Guarda no cache partilhado para o whale usar
+            _scoring_cache["markets"]     = scored
+            _scoring_cache["last_update"] = time.time()
+            log.info(f"[SCORER] Cache de scoring actualizado: {len(scored)} mercados")
             wallets     = await get_wallets_cached()
 
             arb_sigs   = ArbitrageAgent().analyze(scored, wallets)
@@ -332,7 +341,25 @@ async def whale_loop(executor, portfolio, exit_manager):
                 continue
 
             whale_markets = await fetch_markets([c[0] for c in candidates[:80]])
-            scored        = _score(whale_markets, min_score=MIN_SCORE)
+
+            # Usa cache de scoring do scorer se disponível e recente
+            now_ts = time.time()
+            if _scoring_cache["markets"] and (now_ts - _scoring_cache["last_update"]) < SCORING_CACHE_TTL:
+                # Filtra mercados scored que são candidatos whale
+                scored_ids_from_cache = {m.condition_id: m for m in _scoring_cache["markets"]}
+                scored_from_cache = [scored_ids_from_cache[c[0]] for c in candidates if c[0] in scored_ids_from_cache]
+
+                if scored_from_cache:
+                    log.info(f"[WHALE] Usando cache de scoring: {len(scored_from_cache)} mercados (sem chamadas Claude)")
+                    scored = scored_from_cache
+                else:
+                    # Candidatos whale não estão no cache — score só eles (poucos mercados)
+                    log.info(f"[WHALE] Candidatos não no cache — a score {len(whale_markets)} mercados whale")
+                    scored = _score(whale_markets, min_score=MIN_SCORE)
+            else:
+                # Cache expirado — score só os candidatos whale (não os 250 todos)
+                log.info(f"[WHALE] Cache expirado — a score {len(whale_markets)} mercados whale")
+                scored = _score(whale_markets, min_score=MIN_SCORE)
 
             scored_ids = {m.condition_id: m for m in scored}
             whale_sigs = []
