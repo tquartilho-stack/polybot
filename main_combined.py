@@ -48,7 +48,12 @@ WALLET_CACHE_TTL = 6 * 3600
 
 # Scoring cache partilhado — scorer partilha resultados com whale
 _scoring_cache = {"markets": [], "last_update": 0.0}
-SCORING_CACHE_TTL = 25 * 60  # 25 minutos (ligeiramente menos que o ciclo de 30min)
+SCORING_CACHE_TTL = 25 * 60  # 25 minutos
+
+# Custo estimado Claude (Sonnet 4.6: $3 input + $15 output por MTok)
+# Cada batch de 20 mercados usa ~3000 tokens input + ~500 output ≈ $0.017
+_claude_stats = {"calls_today": 0, "cost_today_usd": 0.0, "last_reset": ""}
+COST_PER_CALL  = 0.017  # estimativa por batch
 
 _log_buffer_scorer: list[str] = []
 _log_buffer_whale:  list[str] = []
@@ -119,6 +124,8 @@ def _write_dashboard(file: Path, cycle, markets_total, markets_scored, signals, 
         "wins":           wins,
         "win_rate":       round(win_rate, 1),
         "total_pnl":      round(total_pnl, 2),
+        "claude_calls_today": _claude_stats["calls_today"],
+        "claude_cost_today":  round(_claude_stats["cost_today_usd"], 2),
         "open_positions": [
             {
                 "trade_id":      p.trade_id,
@@ -211,10 +218,20 @@ async def scorer_loop(executor, portfolio, exit_manager):
             all_markets = await get_filtered_markets()
             scored      = score_markets(all_markets)
 
+            # Tracking de custo Claude
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            if _claude_stats["last_reset"] != today:
+                _claude_stats["calls_today"]    = 0
+                _claude_stats["cost_today_usd"] = 0.0
+                _claude_stats["last_reset"]     = today
+            n_batches = max(1, len(all_markets) // 20)
+            _claude_stats["calls_today"]    += n_batches
+            _claude_stats["cost_today_usd"] += n_batches * COST_PER_CALL
+
             # Guarda no cache partilhado para o whale usar
             _scoring_cache["markets"]     = scored
             _scoring_cache["last_update"] = time.time()
-            log.info(f"[SCORER] Cache de scoring actualizado: {len(scored)} mercados")
+            log.info(f"[SCORER] Cache de scoring actualizado: {len(scored)} mercados | custo hoje estimado: ${_claude_stats['cost_today_usd']:.2f}")
             wallets     = await get_wallets_cached()
 
             arb_sigs   = ArbitrageAgent().analyze(scored, wallets)

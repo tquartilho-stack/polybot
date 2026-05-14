@@ -130,10 +130,11 @@
     <button id="s-btn-stop" onclick="handleStop('scorer')" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--red);background:var(--surface);color:var(--red);cursor:pointer;">⏹ stop</button>
   </div>
   <div class="grid">
-    <div class="metric"><div class="metric-label">PnL</div><div class="metric-value" id="s-pnl">$0.00</div><div class="metric-sub" id="s-trades">0 trades</div></div>
+    <div class="metric"><div class="metric-label">PnL simulado</div><div class="metric-value" id="s-pnl">$0.00</div><div class="metric-sub" id="s-trades">0 trades</div></div>
     <div class="metric"><div class="metric-label">Win rate</div><div class="metric-value" id="s-wr">—</div><div class="metric-sub" id="s-wins">—</div></div>
     <div class="metric"><div class="metric-label">Mercados</div><div class="metric-value" id="s-markets">—</div><div class="metric-sub" id="s-markets-sub">—</div></div>
     <div class="metric"><div class="metric-label">Posições abertas</div><div class="metric-value" id="s-open">0</div><div class="metric-sub" id="s-next">próximo ciclo em —</div></div>
+    <div class="metric"><div class="metric-label">Claude hoje</div><div class="metric-value" id="s-claude-cost">$0.00</div><div class="metric-sub" id="s-claude-calls">0 chamadas</div></div>
   </div>
   <div class="cycle-info">
     <span>ciclo <b id="s-cycle">—</b></span>
@@ -166,7 +167,7 @@
     <button id="w-btn-stop" onclick="handleStop('whale')" style="font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:4px;border:1px solid var(--red);background:var(--surface);color:var(--red);cursor:pointer;">⏹ stop</button>
   </div>
   <div class="grid">
-    <div class="metric"><div class="metric-label">PnL</div><div class="metric-value" id="w-pnl">$0.00</div><div class="metric-sub" id="w-trades">0 trades</div></div>
+    <div class="metric"><div class="metric-label">PnL simulado</div><div class="metric-value" id="w-pnl">$0.00</div><div class="metric-sub" id="w-trades">0 trades</div></div>
     <div class="metric"><div class="metric-label">Win rate</div><div class="metric-value" id="w-wr">—</div><div class="metric-sub" id="w-wins">—</div></div>
     <div class="metric"><div class="metric-label">Mercados</div><div class="metric-value" id="w-markets">—</div><div class="metric-sub" id="w-markets-sub">—</div></div>
     <div class="metric"><div class="metric-label">Posições abertas</div><div class="metric-value" id="w-open">0</div><div class="metric-sub" id="w-next">próximo ciclo em —</div></div>
@@ -244,6 +245,12 @@ function renderBot(d, prefix, barClass) {
   document.getElementById(prefix+'-wins').textContent = d.total_trades>0 ? d.wins+' wins / '+(d.total_trades-d.wins)+' loss' : '—';
   document.getElementById(prefix+'-markets').textContent = d.markets_scored;
   document.getElementById(prefix+'-markets-sub').textContent = 'de '+d.markets_total+' analisados';
+  if (prefix === 's') {
+    const costEl = document.getElementById('s-claude-cost');
+    const callsEl = document.getElementById('s-claude-calls');
+    if (costEl) costEl.textContent = '$'+(d.claude_cost_today ?? 0).toFixed(2);
+    if (callsEl) callsEl.textContent = (d.claude_calls_today ?? 0)+' chamadas';
+  }
   document.getElementById(prefix+'-open').textContent = d.open_positions.length;
   document.getElementById(prefix+'-cycle').textContent = d.cycle;
   document.getElementById(prefix+'-consensus').textContent = d.consensus_full;
