@@ -116,6 +116,7 @@ class Portfolio:
         return {
             "trade_id":       p.trade_id,
             "condition_id":   p.market.condition_id,
+            "token_id":       p.token_id,
             "question":       p.market.question,
             "yes_price":      p.market.yes_price,
             "no_price":       p.market.no_price,
@@ -157,6 +158,7 @@ class Portfolio:
             current_price   = d.get("current_price", d["entry_price"]),
             peak_price      = d.get("peak_price", d["entry_price"]),
             volume_baseline = d.get("volume_baseline", 0),
+            token_id        = d.get("token_id", ""),
         )
 
     def _result_to_dict(self, r: TradeResult) -> dict:

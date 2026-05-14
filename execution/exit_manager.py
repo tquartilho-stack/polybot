@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from config import EXIT_PROFIT_TARGET, VOLUME_SPIKE_MULT, POLL_INTERVAL_SECS, GAMMA_API
+from config import EXIT_PROFIT_TARGET, VOLUME_SPIKE_MULT, POLL_INTERVAL_SECS, GAMMA_API, CLOB_API
 from data.models import OpenPosition, TradeResult, Side
 
 log = logging.getLogger(__name__)
@@ -46,6 +46,51 @@ class ExitManager:
         return new_results
 
     async def _check_exit(self, pos: OpenPosition, http: httpx.AsyncClient) -> str | None:
+        # Usa token_id para ler preço correcto via CLOB (funciona para todos os mercados incluindo negRisk)
+        current_price = 0.0
+
+        if pos.token_id:
+            try:
+                r = await http.get(
+                    f"{CLOB_API}/last-trade-price",
+                    params={"token_id": pos.token_id},
+                    timeout=10,
+                )
+                r.raise_for_status()
+                current_price = float(r.json().get("price", 0))
+            except:
+                pass
+
+        # Fallback para Gamma API se não tiver token_id ou falhar
+        if current_price == 0:
+            try:
+                r = await http.get(
+                    f"{GAMMA_API}/markets",
+                    params={"conditionIds": pos.market.condition_id},
+                    timeout=10,
+                )
+                r.raise_for_status()
+                data = r.json()
+                if not data:
+                    return None
+                market_data = data[0] if isinstance(data, list) else data
+                import json as _json
+                prices_raw = market_data.get("outcomePrices", '["0.5","0.5"]')
+                if isinstance(prices_raw, str):
+                    prices_raw = _json.loads(prices_raw)
+                current_price = float(prices_raw[0]) if pos.side == Side.YES else float(prices_raw[1])
+            except Exception as e:
+                log.warning(f"Falha ao puxar preco {pos.trade_id}: {e}")
+                return None
+
+        pos.current_price = current_price
+        if current_price > pos.peak_price:
+            pos.peak_price = current_price
+
+        if current_price >= pos.target_exit:
+            return "target"
+
+        # Volume spike via Gamma API
         try:
             r = await http.get(
                 f"{GAMMA_API}/markets",
@@ -54,29 +99,13 @@ class ExitManager:
             )
             r.raise_for_status()
             data = r.json()
-            if not data:
-                return None
             market_data = data[0] if isinstance(data, list) else data
-        except Exception as e:
-            log.warning(f"Falha ao puxar mercado {pos.trade_id}: {e}")
-            return None
-
-        prices_raw = market_data.get("outcomePrices", '["0.5","0.5"]')
-        if isinstance(prices_raw, str):
-            prices_raw = json.loads(prices_raw)
-
-        current_price = float(prices_raw[0]) if pos.side == Side.YES else float(prices_raw[1])
-        pos.current_price = current_price
-        if current_price > pos.peak_price:
-            pos.peak_price = current_price
-
-        if current_price >= pos.target_exit:
-            return "target"
-
-        current_volume = float(market_data.get("volume24hr", 0))
-        if pos.volume_baseline > 0 and current_volume > 0:
-            if current_volume / pos.volume_baseline >= VOLUME_SPIKE_MULT:
-                return "volume_spike"
+            current_volume = float(market_data.get("volume24hr", 0))
+            if pos.volume_baseline > 0 and current_volume > 0:
+                if current_volume / pos.volume_baseline >= VOLUME_SPIKE_MULT:
+                    return "volume_spike"
+        except:
+            pass
 
         now = datetime.now(timezone.utc)
         mins_left = (pos.market.resolves_at - now).total_seconds() / 60

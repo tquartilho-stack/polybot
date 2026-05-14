@@ -84,6 +84,7 @@ class OpenPosition:
     current_price:  float = 0.0
     peak_price:     float = 0.0
     volume_baseline: float = 0.0   # volume na hora de entrada
+    token_id:        str   = ""    # token_id para leitura correcta de precos via CLOB
 
 
 @dataclass

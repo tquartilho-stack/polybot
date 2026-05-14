@@ -1,8 +1,6 @@
 """
-sync_portfolio.py — sincroniza portfolio_state.json com posições reais do Polymarket.
-
-Corre localmente:
-  python sync_portfolio.py
+sync_portfolio.py — sincroniza portfolio_state.json com posicoes reais do Polymarket.
+Guarda token_id (asset) para leitura correcta de precos via CLOB.
 """
 from __future__ import annotations
 import asyncio
@@ -17,6 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 POLY_DATA_API = "https://data-api.polymarket.com"
+CLOB_API      = "https://clob.polymarket.com"
 PROXY_ADDRESS = os.getenv("POLY_PROXY_ADDRESS", "")
 
 SCORER_STATE = Path("portfolio_state.json")
@@ -35,6 +34,22 @@ async def fetch_open_positions(address: str) -> list[dict]:
         return [p for p in data if float(p.get("size", 0)) > 0] if isinstance(data, list) else []
 
 
+async def fetch_clob_price(token_id: str) -> float:
+    """Lê preço actual via CLOB usando o token_id."""
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(f"{CLOB_API}/last-trade-price", params={"token_id": token_id}, timeout=5)
+            r.raise_for_status()
+            return float(r.json().get("price", 0))
+        except:
+            try:
+                r = await client.get(f"{CLOB_API}/midpoint", params={"token_id": token_id}, timeout=5)
+                r.raise_for_status()
+                return float(r.json().get("mid", 0))
+            except:
+                return 0.0
+
+
 def load_state(path: Path) -> dict:
     if not path.exists():
         return {"daily_count": {}, "positions": [], "history": []}
@@ -46,36 +61,40 @@ def save_state(path: Path, state: dict):
     print(f"  Guardado: {path}")
 
 
-def position_to_dict(p: dict) -> dict:
-    """Converte posição da API para formato do portfolio_state."""
+async def position_to_dict(p: dict) -> dict:
     cid     = p.get("conditionId", "")
+    token_id = p.get("asset", "")  # token_id correcto
     outcome = p.get("outcome", "Yes").strip()
-    # Normaliza outcome para YES/NO
     if outcome.upper() not in ("YES", "NO"):
-        outcome = "YES"  # para outcomes como "LNG Esports", assume YES (primeiro token)
+        outcome = "YES"
     else:
         outcome = outcome.upper()
 
     size    = float(p.get("size", 0))
-    price   = float(p.get("avgPrice") or 0.5)
-    cur     = float(p.get("curPrice") or price)
-    title   = p.get("title", "")
+    # Calcula entry price a partir do initialValue e size
+    initial = float(p.get("initialValue") or 0)
+    price   = round(initial / size, 6) if size > 0 else float(p.get("avgPrice") or 0.5)
+    
+    # Pega preco actual via CLOB (correcto para todos os mercados)
+    cur = await fetch_clob_price(token_id) if token_id else float(p.get("curPrice") or price)
+    if cur == 0:
+        cur = float(p.get("curPrice") or price)
 
-    # Parse end date
-    end_str = p.get("endDate", "")
+    title   = p.get("title", "")
+    end_str = p.get("endDate", "").rstrip("Z")
     if end_str:
-        end_str = end_str.rstrip("Z")
-        if "T" not in end_str:
-            end_str += "T23:59:59"
+        if "T" not in end_str: end_str += "T23:59:59"
         resolves_at = datetime.fromisoformat(end_str).replace(tzinfo=timezone.utc)
     else:
         resolves_at = datetime.now(timezone.utc)
 
     hours_left = (resolves_at - datetime.now(timezone.utc)).total_seconds() / 3600
+    target = round(price + 0.85 * (1.0 - price), 4)
 
     return {
         "trade_id":        f"sync_{cid[:8]}_{outcome[:2]}",
         "condition_id":    cid,
+        "token_id":        token_id,   # guardado para leitura de precos
         "question":        title,
         "yes_price":       cur if outcome == "YES" else round(1 - cur, 4),
         "no_price":        cur if outcome == "NO"  else round(1 - cur, 4),
@@ -88,10 +107,11 @@ def position_to_dict(p: dict) -> dict:
         "size_usdc":       round(size * price, 2),
         "entry_price":     price,
         "entry_time":      datetime.now(timezone.utc).isoformat(),
-        "target_exit":     round(cur + 0.85 * (1 - cur), 3),
+        "target_exit":     target,
         "current_price":   cur,
         "peak_price":      cur,
         "volume_baseline": 0.0,
+        "neg_risk":        p.get("negativeRisk", False),
     }
 
 
@@ -115,43 +135,35 @@ async def main():
             save_state(path, state)
         return
 
-    print("Posicoes no Polymarket:")
+    print("Posicoes no Polymarket (a verificar precos via CLOB):")
+    new_positions = []
     for p in real_positions:
-        title   = p.get("title", "")[:50]
-        outcome = p.get("outcome", "?")
+        pos = await position_to_dict(p)
+        title   = pos["question"][:50]
+        outcome = pos["side"]
+        entry   = pos["entry_price"]
+        cur     = pos["current_price"]
         size    = float(p.get("size", 0))
-        price   = float(p.get("curPrice") or 0)
         value   = float(p.get("currentValue") or 0)
-        pnl     = float(p.get("cashPnl") or 0)
-        print(f"  [{outcome}] {title:<50} {size:.1f} shares @ {price:.3f} val=${value:.2f} pnl=${pnl:+.2f}")
+        pnl_pct = float(p.get("percentPnl") or 0)
+        print(f"  [{outcome}] {title:<50} entry={entry:.4f} cur={cur:.4f} val=${value:.2f} ({pnl_pct:+.1f}%)")
+        new_positions.append(pos)
 
     print()
     scorer_state = load_state(SCORER_STATE)
-    whale_state  = load_state(WHALE_STATE)
+    action = input("Reset completo com estes dados? (s/n): ").strip().lower()
 
-    print(f"Scorer portfolio actual: {len(scorer_state.get('positions', []))} posicoes")
-    print(f"Whale portfolio actual:  {len(whale_state.get('positions', []))} posicoes")
-    print()
-
-    action = input("O que fazer?\n  1 - Reset completo (tudo para scorer, whale a zero)\n  2 - Sair sem alterar\n\nEscolha: ").strip()
-
-    if action == "1":
-        new_positions = [position_to_dict(p) for p in real_positions]
-
-        print("\nReconstruido:")
-        for pos in new_positions:
-            print(f"  [{pos['side']}] {pos['question'][:50]}")
-
+    if action == "s":
         scorer_state["positions"] = new_positions
-        whale_state["positions"]  = []
+        scorer_state["history"]   = scorer_state.get("history", [])
+
+        whale_state = load_state(WHALE_STATE)
+        whale_state["positions"] = []
 
         save_state(SCORER_STATE, scorer_state)
         save_state(WHALE_STATE,  whale_state)
-
-        print(f"\n{len(new_positions)} posicoes reconstruidas no scorer portfolio.")
-        print("Whale portfolio limpo.")
-        print("\nAgora faz redeploy no Railway para carregar os ficheiros actualizados.")
-        print("(ou copia para /data via Railway CLI se tiveres acesso)")
+        print(f"\n{len(new_positions)} posicoes reconstruidas com token_id e precos correctos.")
+        print("Corre agora: python upload_portfolio.py")
     else:
         print("Sem alteracoes.")
 

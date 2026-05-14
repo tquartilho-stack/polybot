@@ -60,7 +60,7 @@ class Executor:
                 f"[DRY RUN] {trade_id} — {side.value} {size:.2f} shares "
                 f"@ {price:.3f} — {market.question[:50]}"
             )
-            return self._build_position(trade_id, decision, price)
+            return self._build_position(trade_id, decision, price, "")
 
         try:
             token_id = self._get_token_id(market.condition_id, side)
@@ -77,7 +77,7 @@ class Executor:
 
             if order and order.get("success"):
                 log.info(f"Ordem executada: {trade_id} orderID={order.get('orderID','')[:16]}...")
-                return self._build_position(trade_id, decision, price)
+                return self._build_position(trade_id, decision, price, token_id)
             else:
                 log.warning(f"Ordem nao executada: {order}")
                 return None
@@ -113,7 +113,7 @@ class Executor:
             log.error(f"Erro ao obter token_id: {e}")
         return None
 
-    def _build_position(self, trade_id: str, decision: TradeDecision, actual_price: float) -> OpenPosition:
+    def _build_position(self, trade_id: str, decision: TradeDecision, actual_price: float, token_id: str = "") -> OpenPosition:
         return OpenPosition(
             trade_id        = trade_id,
             market          = decision.market,
@@ -125,4 +125,5 @@ class Executor:
             current_price   = actual_price,
             peak_price      = actual_price,
             volume_baseline = decision.market.volume_usdc,
+            token_id        = token_id,
         )
