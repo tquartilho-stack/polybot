@@ -201,8 +201,12 @@ async def scorer_loop(executor, portfolio, exit_manager):
             continue
 
         if executor.no_balance:
-            log.info("[SCORER] Sem saldo — a aguardar que uma posição feche antes de continuar.")
-            await asyncio.sleep(RUN_INTERVAL_MINS * 60)
+            log.info("[SCORER] Sem saldo — a verificar se alguma posição fechou...")
+            removed = await reconcile_portfolio(portfolio, POLY_PROXY_ADDRESS, "SCORER")
+            if removed > 0:
+                executor.no_balance = False
+                log.info("[SCORER] Posição fechada detectada — saldo libertado, ciclos retomam")
+            await asyncio.sleep(5 * 60)  # verifica de 5 em 5 minutos
             continue
 
         _scorer_cycle += 1
@@ -350,8 +354,12 @@ async def whale_loop(executor, portfolio, exit_manager):
             continue
 
         if executor.no_balance:
-            log.info("[WHALE] Sem saldo — a aguardar que uma posição feche antes de continuar.")
-            await asyncio.sleep(RUN_INTERVAL_MINS * 60)
+            log.info("[WHALE] Sem saldo — a verificar se alguma posição fechou...")
+            removed = await reconcile_portfolio(portfolio, POLY_PROXY_ADDRESS, "WHALE")
+            if removed > 0:
+                executor.no_balance = False
+                log.info("[WHALE] Posição fechada detectada — saldo libertado, ciclos retomam")
+            await asyncio.sleep(5 * 60)  # verifica de 5 em 5 minutos
             continue
 
         _whale_cycle += 1

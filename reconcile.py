@@ -57,56 +57,64 @@ async def fetch_clob_price(token_id: str) -> float:
             return 0.0
 
 
-async def reconcile_portfolio(portfolio, proxy_address: str, label: str = ""):
+async def reconcile_portfolio(portfolio, proxy_address: str, label: str = "") -> int:
     """
     Reconcilia portfolio com posições reais do Polymarket.
-    - Remove posições que já não existem no Polymarket
-    - Actualiza token_id e current_price das posições existentes
-    - Adiciona posições que existem no Polymarket mas não no portfolio (não esperado mas possível)
+    Devolve número de posições removidas.
     """
     real = await fetch_real_positions(proxy_address)
-    if not real:
-        log.warning(f"[{label}/RECONCILE] Sem posições reais ou erro na API")
-        return
+    if not real and portfolio.positions:
+        log.warning(f"[{label}/RECONCILE] API sem dados — a saltar para não remover posições por engano")
+        return 0
 
-    real_by_cid = {}
+    real_by_key = {}
     for p in real:
         cid = p.get("conditionId", "")
         outcome = p.get("outcome", "YES").upper()
         if outcome not in ("YES", "NO"):
             outcome = "YES"
-        key = f"{cid}_{outcome}"
-        real_by_cid[key] = p
+        real_by_key[f"{cid}_{outcome}"] = p
 
-    # Remove posições fantasma (não existem no Polymarket)
+    # Remove posições que já não existem no Polymarket e regista PnL
     to_remove = []
     for pos in portfolio.positions:
         key = f"{pos.market.condition_id}_{pos.side.value}"
-        if key not in real_by_cid:
-            log.info(f"[{label}/RECONCILE] Posição {pos.trade_id} não encontrada no Polymarket — a remover")
+        if key not in real_by_key:
             to_remove.append(pos)
 
     for pos in to_remove:
-        portfolio.positions.remove(pos)
-        if to_remove:
-            portfolio._save()
+        # Tenta calcular PnL real via Data API histórico
+        pnl = _calculate_resolved_pnl(pos)
+        hold_hours = (datetime.now(timezone.utc) - pos.entry_time).total_seconds() / 3600
+
+        from data.models import TradeResult
+        result = TradeResult(
+            trade_id        = pos.trade_id,
+            market_question = pos.market.question,
+            side            = pos.side,
+            size_usdc       = pos.size_usdc,
+            entry_price     = pos.entry_price,
+            exit_price      = pos.current_price,
+            pnl_usdc        = pnl,
+            hold_hours      = hold_hours,
+            exit_reason     = "resolved",
+        )
+        portfolio.close_position(result)
+        log.info(f"[{label}/RECONCILE] Posição resolvida: {pos.trade_id} {pos.market.question[:40]} — PnL ${pnl:+.2f}")
 
     # Actualiza token_id e current_price das posições existentes
     updated = False
     for pos in portfolio.positions:
         key = f"{pos.market.condition_id}_{pos.side.value}"
-        real_pos = real_by_cid.get(key)
+        real_pos = real_by_key.get(key)
         if not real_pos:
             continue
 
-        # Actualiza token_id se não tiver
         token_id = real_pos.get("asset", "")
         if token_id and not pos.token_id:
             pos.token_id = token_id
             updated = True
-            log.info(f"[{label}/RECONCILE] token_id actualizado para {pos.trade_id}")
 
-        # Actualiza current_price via CLOB
         if pos.token_id:
             cur = await fetch_clob_price(pos.token_id)
             if cur > 0 and abs(cur - pos.current_price) > 0.001:
@@ -118,7 +126,19 @@ async def reconcile_portfolio(portfolio, proxy_address: str, label: str = ""):
     if updated:
         portfolio._save()
 
-    log.info(
-        f"[{label}/RECONCILE] {len(portfolio.positions)} posições "
-        f"(real: {len(real)}, removidas: {len(to_remove)})"
-    )
+    removed = len(to_remove)
+    log.info(f"[{label}/RECONCILE] {len(portfolio.positions)} posições (real: {len(real)}, removidas: {removed})")
+    return removed
+
+
+def _calculate_resolved_pnl(pos) -> float:
+    """
+    Calcula PnL quando posição foi resolvida/fechada no Polymarket sem SELL do bot.
+    Usa current_price como exit_price.
+    """
+    if pos.entry_price <= 0:
+        return 0.0
+    shares = pos.size_usdc / pos.entry_price
+    # Se current_price é 0 ou muito baixo, provavelmente resolveu a 0 (perdeu)
+    exit_price = pos.current_price if pos.current_price > 0.01 else 0.0
+    return round((exit_price - pos.entry_price) * shares, 2)
