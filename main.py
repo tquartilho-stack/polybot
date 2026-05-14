@@ -214,8 +214,11 @@ async def main():
             except Exception as e:
                 log.error(f"Erro no ciclo: {e}", exc_info=True)
 
-        log.info(f"A aguardar {RUN_INTERVAL_MINS} minutos…\n")
-        await asyncio.sleep(RUN_INTERVAL_MINS * 60)
+        if not is_started() or is_paused():
+            await asyncio.sleep(10)  # verifica de 10 em 10 segundos quando em standby/pausa
+        else:
+            log.info(f"A aguardar {RUN_INTERVAL_MINS} minutos…\n")
+            await asyncio.sleep(RUN_INTERVAL_MINS * 60)
 
 
 if __name__ == "__main__":
