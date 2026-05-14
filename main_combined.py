@@ -171,6 +171,10 @@ async def _exit_background(portfolio, exit_manager, label):
         for r in results:
             portfolio.close_position(r)
             log.info(f"[{label}/EXIT] {r.trade_id} — PnL ${r.pnl_usdc:+.2f} ({r.exit_reason})")
+            # Limpa flag de sem saldo quando uma posição fecha
+            if exit_manager.executor.no_balance:
+                exit_manager.executor.no_balance = False
+                log.info(f"[{label}] Saldo libertado — ciclos retomam no próximo intervalo")
     except Exception as e:
         log.error(f"Erro exit manager {label}: {e}")
 
@@ -187,6 +191,11 @@ async def scorer_loop(executor, portfolio, exit_manager):
     while True:
         if not is_started() or is_paused():
             await asyncio.sleep(10)
+            continue
+
+        if executor.no_balance:
+            log.info("[SCORER] Sem saldo — a aguardar que uma posição feche antes de continuar.")
+            await asyncio.sleep(RUN_INTERVAL_MINS * 60)
             continue
 
         _scorer_cycle += 1
@@ -321,6 +330,11 @@ async def whale_loop(executor, portfolio, exit_manager):
     while True:
         if not is_started_whale() or is_paused_whale():
             await asyncio.sleep(10)
+            continue
+
+        if executor.no_balance:
+            log.info("[WHALE] Sem saldo — a aguardar que uma posição feche antes de continuar.")
+            await asyncio.sleep(RUN_INTERVAL_MINS * 60)
             continue
 
         _whale_cycle += 1

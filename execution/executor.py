@@ -28,6 +28,7 @@ class Executor:
     ):
         self.dry_run    = dry_run or not CLOB_AVAILABLE
         self.proxy_addr = proxy_addr
+        self.no_balance = False  # flag para pausar quando sem saldo
 
         if not self.dry_run:
             creds = ApiCreds(
@@ -83,6 +84,10 @@ class Executor:
                 return None
 
         except Exception as e:
+            err_str = str(e).lower()
+            if "not enough balance" in err_str or "balance is not enough" in err_str:
+                log.warning(f"Sem saldo disponível — a pausar execução até próxima venda")
+                self.no_balance = True
             log.error(f"Erro na execucao de {trade_id}: {e}")
             return None
 
