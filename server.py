@@ -127,3 +127,9 @@ def is_paused() -> bool:
 
 def is_started() -> bool:
     return STARTED_FILE.exists()
+
+def is_paused_whale() -> bool:
+    return PAUSE_FILE_WHALE.exists()
+
+def is_started_whale() -> bool:
+    return STARTED_FILE_WHALE.exists()
