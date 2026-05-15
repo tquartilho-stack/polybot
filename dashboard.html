@@ -372,7 +372,7 @@ async function fetchData() {
       const ua = new Date(scorerData.updated_at);
       document.getElementById('status-scorer').textContent = 'scorer · '+ua.toLocaleTimeString('pt-PT');
       document.getElementById('dot-scorer').className = 'dot dot-green';
-      scorerNextCycleAt = d.next_cycle_at ? new Date(d.next_cycle_at) : null;
+      scorerNextCycleAt = scorerData.next_cycle_at ? new Date(scorerData.next_cycle_at) : null;
     }
   } catch(e) {
     document.getElementById('status-scorer').textContent = 'scorer · offline';
@@ -388,7 +388,7 @@ async function fetchData() {
       const ua = new Date(whaleData.updated_at);
       document.getElementById('status-whale').textContent = 'whale-first · '+ua.toLocaleTimeString('pt-PT');
       document.getElementById('dot-whale').className = 'dot dot-purple';
-      whaleNextCycleAt = d.next_cycle_at ? new Date(d.next_cycle_at) : null;
+      whaleNextCycleAt = whaleData.next_cycle_at ? new Date(whaleData.next_cycle_at) : null;
     }
   } catch(e) {
     document.getElementById('status-whale').textContent = 'whale-first · offline';
