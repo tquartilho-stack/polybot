@@ -26,7 +26,7 @@ async def fetch_top_wallets_data_api() -> list[dict]:
             )
             r2 = await client.get(
                 f"{POLY_DATA_API}/v1/leaderboard",
-                params={"limit": 50, "orderBy": "VOLUME", "timePeriod": "MONTH"},
+                params={"limit": 50, "orderBy": "PNL", "timePeriod": "ALL"},
                 timeout=20,
             )
             r1.raise_for_status()
