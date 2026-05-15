@@ -316,7 +316,7 @@ async def whale_loop(executor, portfolio, exit_manager):
             for pos in r:
                 cid  = pos.get("conditionId", "")
                 side = pos.get("outcome", "").upper()
-                if cid and side in ("YES", "NO"):
+                if cid and side in ("YES", "NO") and float(pos.get("curPrice") or 0) > 0:
                     whale_map[cid][side] += 1
                     total += 1
         candidates = [(cid, side, count) for cid, sides in whale_map.items() for side, count in sides.items() if count >= MIN_WHALES]
