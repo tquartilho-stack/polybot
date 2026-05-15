@@ -19,13 +19,21 @@ POLY_DATA_API = "https://data-api.polymarket.com"
 async def fetch_top_wallets_data_api() -> list[dict]:
     async with httpx.AsyncClient() as client:
         try:
-            r = await client.get(
+            r1 = await client.get(
                 f"{POLY_DATA_API}/v1/leaderboard",
-                params={"limit": 100, "orderBy": "PNL", "timePeriod": "MONTH"},
+                params={"limit": 50, "orderBy": "PNL", "timePeriod": "MONTH"},
                 timeout=20,
             )
-            r.raise_for_status()
-            return r.json()
+            r2 = await client.get(
+                f"{POLY_DATA_API}/v1/leaderboard",
+                params={"limit": 50, "orderBy": "VOLUME", "timePeriod": "MONTH"},
+                timeout=20,
+            )
+            r1.raise_for_status()
+            r2.raise_for_status()
+            # combina e deduplica por proxyWallet
+            combined = {w["proxyWallet"]: w for w in r1.json() + r2.json()}
+            return list(combined.values())
         except Exception as e:
             log.error(f"Data API indisponível: {e}")
             return []
