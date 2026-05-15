@@ -44,7 +44,7 @@ DATA_DIR = Path("/data") if Path("/data").exists() else Path(".")
 
 # Wallet cache partilhado
 _wallet_cache = {"data": [], "last_update": 0.0}
-WALLET_CACHE_TTL = 6 * 3600
+WALLET_CACHE_TTL = 60
 
 # Scoring cache partilhado — scorer partilha resultados com whale
 _scoring_cache = {"markets": [], "last_update": 0.0}
