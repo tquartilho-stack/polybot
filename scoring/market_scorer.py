@@ -2,7 +2,7 @@
 scoring/market_scorer.py — usa Claude para pontuar mercados.
 
 Pipeline de dois estágios:
-  1. Haiku pre-filtro: descarta mercados óbvios (score < 5) a baixo custo
+  1. Haiku pre-filtro: descarta mercados óbvios (score < 3) a baixo custo
   2. Sonnet scoring fino: analisa só os sobreviventes com profundidade
 """
 from __future__ import annotations
@@ -23,23 +23,22 @@ client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 HAIKU_MODEL    = "claude-haiku-4-5-20251001"
 BATCH_SIZE     = 50   # mercados por chamada ao Haiku (pre-filtro)
 SONNET_BATCH   = 20   # mercados por chamada ao Sonnet (scoring fino)
-HAIKU_THRESHOLD = 4.0  # score mínimo para passar ao Sonnet
+HAIKU_THRESHOLD = 3.0  # score mínimo para passar ao Sonnet
 
 
 # ── System prompts ────────────────────────────────────────────────────────────
 
 PREFILTER_PROMPT = """És um filtro rápido de mercados de predição do Polymarket.
-Descarta mercados sem edge óbvio. Sê conservador — mantém os que têm potencial.
+Estes mercados já passaram filtros de liquidez e timing. A tua função é apenas descartar os trivialmente sem edge.
 
 Devolve EXCLUSIVAMENTE um array JSON sem markdown:
 [{"condition_id": "...", "score": 6.5, "keep": true}]
 
-score: 0-10. keep: true se score >= 4 e vale análise mais profunda.
-Critérios rápidos de descarte (keep: false):
-- Preço muito próximo de 0 ou 1 (sem edge)
-- Liquidez < 1000 USDC
-- Resolve em menos de 2 horas
-- Mercado trivialmente óbvio"""
+score: 0-10. keep: false APENAS se:
+- Preço YES entre 0.02-0.05 ou 0.95-0.98 (mercado já decidido)
+- Pergunta trivialmente óbvia sem incerteza real
+
+Em caso de dúvida, keep: true."""
 
 SYSTEM_PROMPT = """És um analista de mercados de predição especializado no Polymarket.
 Recebes uma lista de mercados binários (YES/NO) com os seus dados e tens de os pontuar.
@@ -102,7 +101,7 @@ def _prefilter_batch(markets: list[Market]) -> list[Market]:
     )
 
     results = _parse_json(message.content[0].text)
-    keep_ids = {r["condition_id"] for r in results if r.get("keep", False)}
+    keep_ids = {r["condition_id"] for r in results if r.get("keep", False) and r.get("score", 0) >= HAIKU_THRESHOLD}
     kept = [m for m in markets if m.condition_id in keep_ids]
     log.info(f"[HAIKU] {len(markets)} → {len(kept)} mercados após pre-filtro")
     return kept
