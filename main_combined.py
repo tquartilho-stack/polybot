@@ -285,7 +285,7 @@ async def whale_loop(executor, portfolio, exit_manager):
     global _whale_cycle, _exit_task_whale
 
     POLY_DATA_API  = "https://data-api.polymarket.com"
-    MIN_WHALES     = 2
+    MIN_WHALES     = 1
     MIN_WHALE_SIZE = 50
     MIN_SCORE      = 5.5
 
