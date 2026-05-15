@@ -437,7 +437,8 @@ async def whale_loop(executor, portfolio, exit_manager):
             console.print(f"[bold purple]{portfolio.summary()}")
             _write_dashboard(DATA_DIR / "dashboard_data_whale.json", _whale_cycle, len(candidates), len(scored), signals, consensus_full, decisions, portfolio, list(_log_buffer_whale))
 
-            # Reconcilia whale após cada ciclo (só remove resolvidas, não adiciona)
+            # Delay antes de reconcile para dar tempo à Poly de reflectir compras
+            await asyncio.sleep(30)
             await reconcile_portfolio(portfolio, POLY_PROXY_ADDRESS, "WHALE")
 
         except Exception as e:
