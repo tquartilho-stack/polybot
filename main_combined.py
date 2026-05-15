@@ -51,7 +51,6 @@ _scoring_cache = {"markets": [], "last_update": 0.0}
 SCORING_CACHE_TTL = 25 * 60  # 25 minutos
 
 # Custo estimado Claude (Sonnet 4.6: $3 input + $15 output por MTok)
-# Cada batch de 20 mercados usa ~3000 tokens input + ~500 output ≈ $0.017
 _claude_stats = {"calls_today": 0, "cost_today_usd": 0.0, "last_reset": ""}
 COST_PER_CALL  = 0.017  # estimativa por batch
 
@@ -186,6 +185,19 @@ async def _exit_background(portfolio, exit_manager, label):
         log.error(f"Erro exit manager {label}: {e}")
 
 
+# ── Reconcile background (scorer only, a cada 5min) ──────────────────────────
+
+async def _reconcile_background_loop(portfolio):
+    """Corre reconcile do scorer a cada 5 minutos em background."""
+    await asyncio.sleep(60)  # espera 1 min após arranque
+    while True:
+        try:
+            await reconcile_portfolio(portfolio, POLY_PROXY_ADDRESS, "SCORER")
+        except Exception as e:
+            log.error(f"[SCORER/RECONCILE-BG] Erro: {e}")
+        await asyncio.sleep(5 * 60)
+
+
 # ── SCORER LOOP ───────────────────────────────────────────────────────────────
 
 async def scorer_loop(executor, portfolio, exit_manager):
@@ -195,18 +207,17 @@ async def scorer_loop(executor, portfolio, exit_manager):
         log.info(f"[SCORER] {len(portfolio.positions)} posições carregadas — exit manager a iniciar...")
         _exit_task_scorer = asyncio.create_task(_exit_background(portfolio, exit_manager, "SCORER"))
 
+    # Reconcile background — mantém scorer sempre sincronizado com Poly
+    asyncio.create_task(_reconcile_background_loop(portfolio))
+
     while True:
         if not is_started() or is_paused():
             await asyncio.sleep(10)
             continue
 
         if executor.no_balance:
-            log.info("[SCORER] Sem saldo — a verificar se alguma posição fechou...")
-            removed = await reconcile_portfolio(portfolio, POLY_PROXY_ADDRESS, "SCORER")
-            if removed > 0:
-                executor.no_balance = False
-                log.info("[SCORER] Posição fechada detectada — saldo libertado, ciclos retomam")
-            await asyncio.sleep(5 * 60)  # verifica de 5 em 5 minutos
+            log.info("[SCORER] Sem saldo — a aguardar reconcile background...")
+            await asyncio.sleep(5 * 60)
             continue
 
         _scorer_cycle += 1
@@ -262,9 +273,6 @@ async def scorer_loop(executor, portfolio, exit_manager):
             console.print(f"[bold cyan]{portfolio.summary()}")
             _write_dashboard(DATA_DIR / "dashboard_data.json", _scorer_cycle, len(all_markets), len(scored), signals, consensus_full, decisions, portfolio, list(_log_buffer_scorer))
 
-            # Reconcilia com Polymarket após cada ciclo
-            await reconcile_portfolio(portfolio, POLY_PROXY_ADDRESS, "SCORER")
-
         except Exception as e:
             log.error(f"[SCORER] Erro: {e}", exc_info=True)
 
@@ -278,7 +286,7 @@ async def whale_loop(executor, portfolio, exit_manager):
 
     POLY_DATA_API  = "https://data-api.polymarket.com"
     MIN_WHALES     = 2
-    MIN_WHALE_SIZE = 100
+    MIN_WHALE_SIZE = 50
     MIN_SCORE      = 5.5
 
     import httpx
@@ -354,12 +362,8 @@ async def whale_loop(executor, portfolio, exit_manager):
             continue
 
         if executor.no_balance:
-            log.info("[WHALE] Sem saldo — a verificar se alguma posição fechou...")
-            removed = await reconcile_portfolio(portfolio, POLY_PROXY_ADDRESS, "WHALE")
-            if removed > 0:
-                executor.no_balance = False
-                log.info("[WHALE] Posição fechada detectada — saldo libertado, ciclos retomam")
-            await asyncio.sleep(5 * 60)  # verifica de 5 em 5 minutos
+            log.info("[WHALE] Sem saldo — a aguardar reconcile do scorer...")
+            await asyncio.sleep(5 * 60)
             continue
 
         _whale_cycle += 1
@@ -384,7 +388,6 @@ async def whale_loop(executor, portfolio, exit_manager):
             # Usa cache de scoring do scorer se disponível e recente
             now_ts = time.time()
             if _scoring_cache["markets"] and (now_ts - _scoring_cache["last_update"]) < SCORING_CACHE_TTL:
-                # Filtra mercados scored que são candidatos whale
                 scored_ids_from_cache = {m.condition_id: m for m in _scoring_cache["markets"]}
                 scored_from_cache = [scored_ids_from_cache[c[0]] for c in candidates if c[0] in scored_ids_from_cache]
 
@@ -392,11 +395,9 @@ async def whale_loop(executor, portfolio, exit_manager):
                     log.info(f"[WHALE] Usando cache de scoring: {len(scored_from_cache)} mercados (sem chamadas Claude)")
                     scored = scored_from_cache
                 else:
-                    # Candidatos whale não estão no cache — score só eles (poucos mercados)
                     log.info(f"[WHALE] Candidatos não no cache — a score {len(whale_markets)} mercados whale")
                     scored = _score(whale_markets, min_score=MIN_SCORE)
             else:
-                # Cache expirado — score só os candidatos whale (não os 250 todos)
                 log.info(f"[WHALE] Cache expirado — a score {len(whale_markets)} mercados whale")
                 scored = _score(whale_markets, min_score=MIN_SCORE)
 
@@ -432,7 +433,7 @@ async def whale_loop(executor, portfolio, exit_manager):
             console.print(f"[bold purple]{portfolio.summary()}")
             _write_dashboard(DATA_DIR / "dashboard_data_whale.json", _whale_cycle, len(candidates), len(scored), signals, consensus_full, decisions, portfolio, list(_log_buffer_whale))
 
-            # Reconcilia com Polymarket após cada ciclo
+            # Reconcilia whale após cada ciclo (só remove resolvidas, não adiciona)
             await reconcile_portfolio(portfolio, POLY_PROXY_ADDRESS, "WHALE")
 
         except Exception as e:

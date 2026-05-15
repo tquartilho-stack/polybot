@@ -1,6 +1,8 @@
 """
 reconcile.py — reconcilia portfolio_state com posições reais do Polymarket.
-Chamado após cada BUY/SELL e a cada ciclo como sanity check.
+- Remove posições que já não existem na Poly (resolvidas/fechadas) e regista PnL
+- Adiciona posições em falta ao scorer (posições na Poly mas não no portfolio)
+- Actualiza token_id e current_price das posições existentes
 """
 from __future__ import annotations
 import asyncio
@@ -16,7 +18,6 @@ CLOB_API      = "https://clob.polymarket.com"
 
 
 async def fetch_real_positions(proxy_address: str) -> list[dict]:
-    """Pega posições reais do Polymarket."""
     async with httpx.AsyncClient() as client:
         try:
             r = await client.get(
@@ -32,34 +33,84 @@ async def fetch_real_positions(proxy_address: str) -> list[dict]:
             return []
 
 
-async def fetch_clob_price(token_id: str) -> float:
-    """Lê preço actual via CLOB."""
-    async with httpx.AsyncClient() as client:
-        try:
-            r = await client.get(
-                f"{CLOB_API}/last-trade-price",
-                params={"token_id": token_id},
-                timeout=5,
-            )
-            r.raise_for_status()
-            price = float(r.json().get("price", 0))
-            if price > 0:
-                return price
-            # Fallback para midpoint
-            r2 = await client.get(
-                f"{CLOB_API}/midpoint",
-                params={"token_id": token_id},
-                timeout=5,
-            )
-            r2.raise_for_status()
-            return float(r2.json().get("mid", 0))
-        except:
-            return 0.0
+async def _fetch_clob_price(client: httpx.AsyncClient, token_id: str) -> float:
+    try:
+        r = await client.get(f"{CLOB_API}/last-trade-price", params={"token_id": token_id}, timeout=5)
+        r.raise_for_status()
+        price = float(r.json().get("price", 0))
+        if price > 0:
+            return price
+        r2 = await client.get(f"{CLOB_API}/midpoint", params={"token_id": token_id}, timeout=5)
+        r2.raise_for_status()
+        return float(r2.json().get("mid", 0))
+    except:
+        return 0.0
+
+
+async def _build_missing_position(p: dict) -> dict | None:
+    """Constrói dict de posição a partir de dados da Data API."""
+    try:
+        cid      = p.get("conditionId", "")
+        token_id = p.get("asset", "")
+        outcome  = p.get("outcome", "YES").strip().upper()
+        if outcome not in ("YES", "NO"):
+            outcome = "YES"
+
+        size    = float(p.get("size", 0))
+        initial = float(p.get("initialValue") or 0)
+        price   = round(initial / size, 6) if size > 0 else float(p.get("avgPrice") or 0.5)
+        if price <= 0 or price >= 1:
+            price = 0.5
+
+        async with httpx.AsyncClient() as client:
+            cur = await _fetch_clob_price(client, token_id) if token_id else price
+        if cur <= 0:
+            cur = price
+
+        title   = p.get("title", "")
+        end_str = (p.get("endDate") or "").rstrip("Z")
+        if end_str:
+            if "T" not in end_str:
+                end_str += "T23:59:59"
+            resolves_at = datetime.fromisoformat(end_str).replace(tzinfo=timezone.utc)
+        else:
+            resolves_at = datetime.now(timezone.utc)
+
+        hours_left = max((resolves_at - datetime.now(timezone.utc)).total_seconds() / 3600, 0)
+        target     = round(price + 0.85 * (1.0 - price), 4)
+
+        return {
+            "trade_id":         f"sync_{cid[:8]}_{outcome[:2]}",
+            "condition_id":     cid,
+            "token_id":         token_id,
+            "question":         title,
+            "yes_price":        cur if outcome == "YES" else round(1 - cur, 4),
+            "no_price":         cur if outcome == "NO"  else round(1 - cur, 4),
+            "volume_usdc":      0.0,
+            "liquidity_usdc":   0.0,
+            "spread":           0.01,
+            "resolves_at":      resolves_at.isoformat(),
+            "hours_to_resolve": hours_left,
+            "side":             outcome,
+            "size_usdc":        round(size * price, 2),
+            "entry_price":      price,
+            "entry_time":       datetime.now(timezone.utc).isoformat(),
+            "target_exit":      target,
+            "current_price":    cur,
+            "peak_price":       cur,
+            "volume_baseline":  0.0,
+        }
+    except Exception as e:
+        log.warning(f"Erro ao construir posição em falta: {e}")
+        return None
 
 
 async def reconcile_portfolio(portfolio, proxy_address: str, label: str = "") -> int:
     """
     Reconcilia portfolio com posições reais do Polymarket.
+    - Remove posições fechadas/resolvidas e regista PnL
+    - Adiciona posições em falta (scorer only)
+    - Actualiza token_id e preços
     Devolve número de posições removidas.
     """
     real = await fetch_real_positions(proxy_address)
@@ -69,13 +120,13 @@ async def reconcile_portfolio(portfolio, proxy_address: str, label: str = "") ->
 
     real_by_key = {}
     for p in real:
-        cid = p.get("conditionId", "")
+        cid     = p.get("conditionId", "")
         outcome = p.get("outcome", "YES").upper()
         if outcome not in ("YES", "NO"):
             outcome = "YES"
         real_by_key[f"{cid}_{outcome}"] = p
 
-    # Remove posições que já não existem no Polymarket e regista PnL
+    # ── Remove posições que já não existem na Poly ────────────────────────────
     to_remove = []
     for pos in portfolio.positions:
         key = f"{pos.market.condition_id}_{pos.side.value}"
@@ -83,8 +134,7 @@ async def reconcile_portfolio(portfolio, proxy_address: str, label: str = "") ->
             to_remove.append(pos)
 
     for pos in to_remove:
-        # Tenta calcular PnL real via Data API histórico
-        pnl = _calculate_resolved_pnl(pos)
+        pnl        = _calculate_resolved_pnl(pos)
         hold_hours = (datetime.now(timezone.utc) - pos.entry_time).total_seconds() / 3600
 
         from data.models import TradeResult
@@ -100,28 +150,49 @@ async def reconcile_portfolio(portfolio, proxy_address: str, label: str = "") ->
             exit_reason     = "resolved",
         )
         portfolio.close_position(result)
-        log.info(f"[{label}/RECONCILE] Posição resolvida: {pos.trade_id} {pos.market.question[:40]} — PnL ${pnl:+.2f}")
+        log.info(f"[{label}/RECONCILE] Resolvida: {pos.trade_id} {pos.market.question[:40]} PnL ${pnl:+.2f}")
 
-    # Actualiza token_id e current_price das posições existentes
+    # ── Adiciona posições em falta (scorer only) ──────────────────────────────
+    if label in ("SCORER", ""):
+        portfolio_keys = {f"{pos.market.condition_id}_{pos.side.value}" for pos in portfolio.positions}
+        added = 0
+        for key, p in real_by_key.items():
+            if key not in portfolio_keys:
+                pos_dict = await _build_missing_position(p)
+                if not pos_dict:
+                    continue
+                try:
+                    pos = portfolio._dict_to_position(pos_dict)
+                    portfolio.positions.append(pos)
+                    portfolio._save()
+                    added += 1
+                    log.info(f"[{label}/RECONCILE] Posição em falta adicionada: {pos_dict['question'][:40]}")
+                except Exception as e:
+                    log.warning(f"[{label}/RECONCILE] Erro ao adicionar posição: {e}")
+        if added:
+            log.info(f"[{label}/RECONCILE] {added} posições adicionadas automaticamente")
+
+    # ── Actualiza token_id e preços das posições existentes ───────────────────
     updated = False
-    for pos in portfolio.positions:
-        key = f"{pos.market.condition_id}_{pos.side.value}"
-        real_pos = real_by_key.get(key)
-        if not real_pos:
-            continue
+    async with httpx.AsyncClient() as client:
+        for pos in portfolio.positions:
+            key      = f"{pos.market.condition_id}_{pos.side.value}"
+            real_pos = real_by_key.get(key)
+            if not real_pos:
+                continue
 
-        token_id = real_pos.get("asset", "")
-        if token_id and not pos.token_id:
-            pos.token_id = token_id
-            updated = True
-
-        if pos.token_id:
-            cur = await fetch_clob_price(pos.token_id)
-            if cur > 0 and abs(cur - pos.current_price) > 0.001:
-                pos.current_price = cur
-                if cur > pos.peak_price:
-                    pos.peak_price = cur
+            token_id = real_pos.get("asset", "")
+            if token_id and not pos.token_id:
+                pos.token_id = token_id
                 updated = True
+
+            if pos.token_id:
+                cur = await _fetch_clob_price(client, pos.token_id)
+                if cur > 0 and abs(cur - pos.current_price) > 0.001:
+                    pos.current_price = cur
+                    if cur > pos.peak_price:
+                        pos.peak_price = cur
+                    updated = True
 
     if updated:
         portfolio._save()
@@ -132,13 +203,8 @@ async def reconcile_portfolio(portfolio, proxy_address: str, label: str = "") ->
 
 
 def _calculate_resolved_pnl(pos) -> float:
-    """
-    Calcula PnL quando posição foi resolvida/fechada no Polymarket sem SELL do bot.
-    Usa current_price como exit_price.
-    """
     if pos.entry_price <= 0:
         return 0.0
-    shares = pos.size_usdc / pos.entry_price
-    # Se current_price é 0 ou muito baixo, provavelmente resolveu a 0 (perdeu)
+    shares     = pos.size_usdc / pos.entry_price
     exit_price = pos.current_price if pos.current_price > 0.01 else 0.0
     return round((exit_price - pos.entry_price) * shares, 2)
