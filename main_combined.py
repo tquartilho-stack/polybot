@@ -395,11 +395,15 @@ async def whale_loop(executor, portfolio, exit_manager):
                     log.info(f"[WHALE] Usando cache de scoring: {len(scored_from_cache)} mercados (sem chamadas Claude)")
                     scored = scored_from_cache
                 else:
-                    log.info(f"[WHALE] Candidatos não no cache — a score {len(whale_markets)} mercados whale")
-                    scored = _score(whale_markets, min_score=MIN_SCORE)
+                    log.info("[WHALE] Candidatos não no cache do scorer — a aguardar próximo ciclo scorer")
+                    _write_dashboard(DATA_DIR / "dashboard_data_whale.json", _whale_cycle, len(candidates), 0, {"whale_lead":0,"arbitrage":0,"convergence":0}, 0, [], portfolio, list(_log_buffer_whale))
+                    await asyncio.sleep(RUN_INTERVAL_MINS * 60)
+                    continue
             else:
-                log.info(f"[WHALE] Cache expirado — a score {len(whale_markets)} mercados whale")
-                scored = _score(whale_markets, min_score=MIN_SCORE)
+                log.info("[WHALE] Cache scorer vazio ou expirado — a aguardar próximo ciclo scorer")
+                _write_dashboard(DATA_DIR / "dashboard_data_whale.json", _whale_cycle, len(candidates), 0, {"whale_lead":0,"arbitrage":0,"convergence":0}, 0, [], portfolio, list(_log_buffer_whale))
+                await asyncio.sleep(RUN_INTERVAL_MINS * 60)
+                continue
 
             scored_ids = {m.condition_id: m for m in scored}
             whale_sigs = []
