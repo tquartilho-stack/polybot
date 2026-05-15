@@ -278,7 +278,7 @@ async def whale_loop(executor, portfolio, exit_manager):
 
     POLY_DATA_API  = "https://data-api.polymarket.com"
     MIN_WHALES     = 2
-    MIN_WHALE_SIZE = 50
+    MIN_WHALE_SIZE = 100
     MIN_SCORE      = 5.5
 
     import httpx
@@ -300,7 +300,7 @@ async def whale_loop(executor, portfolio, exit_manager):
 
     async def fetch_candidates(wallets):
         async with httpx.AsyncClient() as client:
-            results = await asyncio.gather(*[fetch_positions(client, w.address) for w in wallets[:50]], return_exceptions=True)
+            results = await asyncio.gather(*[fetch_positions(client, w.address) for w in wallets[:100]], return_exceptions=True)
         whale_map = defaultdict(lambda: {"YES": 0, "NO": 0})
         total = 0
         for r in results:

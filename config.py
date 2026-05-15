@@ -23,7 +23,7 @@ GRAPH_API   = "https://api.thegraph.com/subgraphs/name/polymarket/matic-markets"
 # ── Wallet scanner ──────────────────────────────────────────────────────────
 MIN_TRADES          = 100          # mínimo de trades para considerar uma wallet
 MIN_WIN_RATE        = 0.70         # 70% win rate
-TOP_N_WALLETS       = 50           # top wallets a trackear
+TOP_N_WALLETS       = 100           # top wallets a trackear
 WALLET_LOOKBACK_DAYS= 90           # dias de histórico a analisar
 
 # ── Market scorer ───────────────────────────────────────────────────────────
