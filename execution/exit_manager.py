@@ -177,4 +177,8 @@ class ExitManager:
                 log.info(f"Ordem SELL limite agressiva @ {aggressive_price}: {pos.trade_id} — {result}")
 
         except Exception as e:
-            log.error(f"Erro ao vender {pos.trade_id}: {e}")
+            err_str = str(e).lower()
+            if "not enough balance" in err_str or "balance is not enough" in err_str or "balance: 0" in err_str:
+                log.warning(f"[SELL] Sem saldo/allowance para {pos.trade_id} — posição provavelmente já resolvida ou criada via sync")
+            else:
+                log.error(f"Erro ao vender {pos.trade_id}: {e}")
