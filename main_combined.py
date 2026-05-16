@@ -173,14 +173,7 @@ def _write_dashboard(file: Path, cycle, markets_total, markets_scored, signals, 
 
 async def _exit_background(portfolio, exit_manager, label):
     try:
-        results = await exit_manager.monitor_loop(list(portfolio.positions))
-        for r in results:
-            portfolio.close_position(r)
-            log.info(f"[{label}/EXIT] {r.trade_id} — PnL ${r.pnl_usdc:+.2f} ({r.exit_reason})")
-            # Limpa flag de sem saldo quando uma posição fecha
-            if exit_manager.executor.no_balance:
-                exit_manager.executor.no_balance = False
-                log.info(f"[{label}] Saldo libertado — ciclos retomam no próximo intervalo")
+        await exit_manager.monitor_loop(portfolio)
     except Exception as e:
         log.error(f"Erro exit manager {label}: {e}")
 
@@ -200,7 +193,17 @@ async def _reconcile_background_loop(portfolio):
 
 # ── SCORER LOOP ───────────────────────────────────────────────────────────────
 
-async def scorer_loop(executor, portfolio, exit_manager):
+
+def _has_opposite_side(portfolio, condition_id: str, side) -> bool:
+    """Verifica se já existe posição no lado oposto do mesmo mercado."""
+    from data.models import Side
+    opposite = Side.NO if side == Side.YES else Side.YES
+    return any(
+        p.market.condition_id == condition_id and p.side == opposite
+        for p in portfolio.positions
+    )
+
+async def scorer_loop(executor, portfolio, exit_manager, whale_portfolio=None):
     global _scorer_cycle, _exit_task_scorer
 
     if portfolio.positions:
@@ -261,6 +264,11 @@ async def scorer_loop(executor, portfolio, exit_manager):
             for d in decisions:
                 if not portfolio.can_trade(): break
                 if portfolio.already_open(d.market.condition_id): continue
+                # Dedup cross-bot: não comprar se whale já tem posição no mesmo mercado
+                if whale_portfolio and whale_portfolio.already_open(d.market.condition_id): continue
+                # Não comprar lado oposto de posição já aberta
+                if _has_opposite_side(portfolio, d.market.condition_id, d.side): continue
+                if whale_portfolio and _has_opposite_side(whale_portfolio, d.market.condition_id, d.side): continue
                 pos = executor.execute(d)
                 if pos: portfolio.add_position(pos)
 
@@ -281,7 +289,7 @@ async def scorer_loop(executor, portfolio, exit_manager):
 
 # ── WHALE LOOP ────────────────────────────────────────────────────────────────
 
-async def whale_loop(executor, portfolio, exit_manager):
+async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
     global _whale_cycle, _exit_task_whale
 
     POLY_DATA_API  = "https://data-api.polymarket.com"
@@ -425,6 +433,11 @@ async def whale_loop(executor, portfolio, exit_manager):
             for d in decisions:
                 if not portfolio.can_trade(): break
                 if portfolio.already_open(d.market.condition_id): continue
+                # Dedup cross-bot: não comprar se scorer já tem posição no mesmo mercado
+                if scorer_portfolio and scorer_portfolio.already_open(d.market.condition_id): continue
+                # Não comprar lado oposto de posição já aberta
+                if _has_opposite_side(portfolio, d.market.condition_id, d.side): continue
+                if scorer_portfolio and _has_opposite_side(scorer_portfolio, d.market.condition_id, d.side): continue
                 pos = executor.execute(d)
                 if pos: portfolio.add_position(pos)
 
@@ -437,8 +450,7 @@ async def whale_loop(executor, portfolio, exit_manager):
             console.print(f"[bold purple]{portfolio.summary()}")
             _write_dashboard(DATA_DIR / "dashboard_data_whale.json", _whale_cycle, len(candidates), len(scored), signals, consensus_full, decisions, portfolio, list(_log_buffer_whale))
 
-            # Delay antes de reconcile para dar tempo à Poly de reflectir compras
-            await asyncio.sleep(30)
+            # Reconcilia whale após cada ciclo (só remove resolvidas, não adiciona)
             await reconcile_portfolio(portfolio, POLY_PROXY_ADDRESS, "WHALE")
 
         except Exception as e:
@@ -488,8 +500,8 @@ async def main():
     whale_exit  = ExitManager(executor)
 
     await asyncio.gather(
-        scorer_loop(executor, scorer_portfolio, scorer_exit),
-        whale_loop(executor, whale_portfolio, whale_exit),
+        scorer_loop(executor, scorer_portfolio, scorer_exit, whale_portfolio),
+        whale_loop(executor, whale_portfolio, whale_exit, scorer_portfolio),
     )
 
 

@@ -89,7 +89,7 @@ async def position_to_dict(p: dict) -> dict:
         resolves_at = datetime.now(timezone.utc)
 
     hours_left = (resolves_at - datetime.now(timezone.utc)).total_seconds() / 3600
-    target = round(price + 0.85 * (1.0 - price), 4)
+    target = round(price + 0.90 * (1.0 - price), 4)
 
     return {
         "trade_id":        f"sync_{cid[:8]}_{outcome[:2]}",

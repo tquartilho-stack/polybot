@@ -77,7 +77,7 @@ async def _build_missing_position(p: dict) -> dict | None:
             resolves_at = datetime.now(timezone.utc)
 
         hours_left = max((resolves_at - datetime.now(timezone.utc)).total_seconds() / 3600, 0)
-        target     = round(price + 0.85 * (1.0 - price), 4)
+        target     = round(price + 0.90 * (1.0 - price), 4)
 
         return {
             "trade_id":         f"sync_{cid[:8]}_{outcome[:2]}",
@@ -203,8 +203,19 @@ async def reconcile_portfolio(portfolio, proxy_address: str, label: str = "") ->
 
 
 def _calculate_resolved_pnl(pos) -> float:
+    """
+    Calcula PnL quando posição foi resolvida no Polymarket.
+    Se current_price >= 0.95 assume resolução positiva (exit a 1.0).
+    Se current_price <= 0.05 assume resolução negativa (exit a 0.0).
+    Caso contrário usa current_price.
+    """
     if pos.entry_price <= 0:
         return 0.0
-    shares     = pos.size_usdc / pos.entry_price
-    exit_price = pos.current_price if pos.current_price > 0.01 else 0.0
+    shares = pos.size_usdc / pos.entry_price
+    if pos.current_price >= 0.95:
+        exit_price = 1.0
+    elif pos.current_price <= 0.05:
+        exit_price = 0.0
+    else:
+        exit_price = pos.current_price
     return round((exit_price - pos.entry_price) * shares, 2)

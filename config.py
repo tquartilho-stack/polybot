@@ -39,7 +39,7 @@ HALF_SIZE_USDC      = 10         # tamanho quando só 1 agente concorda
 CONSENSUS_THRESHOLD = 2            # mínimo de agentes para full size
 
 # ── Exit manager ────────────────────────────────────────────────────────────
-EXIT_PROFIT_TARGET  = 0.85         # sai a 85% do movimento esperado
+EXIT_PROFIT_TARGET  = 0.90         # sai a 85% do movimento esperado
 VOLUME_SPIKE_MULT   = 3.0          # sai se volume fizer 3x em pouco tempo
 POLL_INTERVAL_SECS  = 60           # frequência de verificação de posições abertas
 

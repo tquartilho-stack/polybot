@@ -11,19 +11,26 @@ from data.models import OpenPosition, TradeResult, Side
 
 log = logging.getLogger(__name__)
 
-MAX_POLLS = 60
-
 
 class ExitManager:
     def __init__(self, executor):
         self.executor = executor
         self.closed_trades: list[TradeResult] = []
 
-    async def monitor_loop(self, positions: list[OpenPosition]) -> list[TradeResult]:
-        new_results: list[TradeResult] = []
-
+    async def monitor_loop(self, portfolio) -> None:
+        """
+        Monitoriza posições abertas continuamente.
+        Recebe o portfolio directamente para detectar novas posições adicionadas após arranque.
+        Corre indefinidamente em background.
+        """
         async with httpx.AsyncClient() as http:
-            while positions:
+            while True:
+                positions = list(portfolio.positions)
+
+                if not positions:
+                    await asyncio.sleep(POLL_INTERVAL_SECS)
+                    continue
+
                 to_close: list[tuple[OpenPosition, str]] = []
 
                 for pos in positions:
@@ -37,16 +44,16 @@ class ExitManager:
                 for pos, reason in to_close:
                     result = await self._close(pos, reason)
                     if result:
-                        new_results.append(result)
-                        positions.remove(pos)
+                        portfolio.close_position(result)
+                        self.closed_trades.append(result)
+                        log.info(f"[EXIT] {result.trade_id} — PnL ${result.pnl_usdc:+.2f} ({result.exit_reason})")
+                        if self.executor.no_balance:
+                            self.executor.no_balance = False
+                            log.info("[EXIT] Saldo libertado — ciclos retomam")
 
-                if positions:
-                    await asyncio.sleep(POLL_INTERVAL_SECS)
-
-        return new_results
+                await asyncio.sleep(POLL_INTERVAL_SECS)
 
     async def _check_exit(self, pos: OpenPosition, http: httpx.AsyncClient) -> str | None:
-        # Usa token_id para ler preço correcto via CLOB (funciona para todos os mercados incluindo negRisk)
         current_price = 0.0
 
         if pos.token_id:
@@ -61,7 +68,6 @@ class ExitManager:
             except:
                 pass
 
-        # Fallback para Gamma API se não tiver token_id ou falhar
         if current_price == 0:
             try:
                 r = await http.get(
@@ -90,7 +96,6 @@ class ExitManager:
         if current_price >= pos.target_exit:
             return "target"
 
-        # Volume spike via Gamma API
         try:
             r = await http.get(
                 f"{GAMMA_API}/markets",
@@ -125,7 +130,6 @@ class ExitManager:
             f"(entry {pos.entry_price:.3f}) — PnL ${pnl:+.2f}"
         )
 
-        # Executa venda real se nao for dry run
         if not self.executor.dry_run:
             await self._sell_position(pos, exit_price)
 
@@ -142,7 +146,6 @@ class ExitManager:
         )
 
     async def _sell_position(self, pos: OpenPosition, exit_price: float):
-        """Coloca ordem SELL de mercado para execução imediata."""
         try:
             from py_clob_client_v2.clob_types import OrderArgsV2
 
@@ -153,7 +156,6 @@ class ExitManager:
 
             shares = round(pos.size_usdc / pos.entry_price, 2)
 
-            # Usa create_and_post_market_order para execução imediata
             try:
                 result = self.executor.clob.create_and_post_market_order(
                     OrderArgsV2(
@@ -165,7 +167,6 @@ class ExitManager:
                 )
                 log.info(f"Ordem SELL mercado: {pos.trade_id} — {result}")
             except Exception:
-                # Fallback para ordem limite agressiva (5% abaixo do mercado)
                 aggressive_price = round(max(exit_price * 0.95, 0.01), 3)
                 order_args = OrderArgsV2(
                     token_id = token_id,
@@ -179,6 +180,6 @@ class ExitManager:
         except Exception as e:
             err_str = str(e).lower()
             if "not enough balance" in err_str or "balance is not enough" in err_str or "balance: 0" in err_str:
-                log.warning(f"[SELL] Sem saldo/allowance para {pos.trade_id} — posição provavelmente já resolvida ou criada via sync")
+                log.warning(f"[SELL] Sem saldo/allowance para {pos.trade_id} — posição já resolvida ou criada via sync")
             else:
                 log.error(f"Erro ao vender {pos.trade_id}: {e}")
