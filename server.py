@@ -34,6 +34,10 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_file(DASHBOARD_DATA, "application/json")
         elif path == "/dashboard_data_whale.json":
             self._serve_file(DASHBOARD_WHALE, "application/json")
+        elif path == "/download-portfolio":
+            self._serve_file(DATA_DIR / "portfolio_state.json", "application/json")
+        elif path == "/download-portfolio-whale":
+            self._serve_file(DATA_DIR / "portfolio_state_whale.json", "application/json")
         elif path == "/status":
             self._json({
                 "paused":        PAUSE_FILE.exists(),
@@ -48,7 +52,27 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
 
-        if path == "/upload-portfolio":
+        if path == "/clean-history":
+            BAD_IDS = {"sync_0x3dbf1d_YE", "sync_0x7382a5_YE", "sync_0xc6ddb1_YE", "sync_0x69f9e1_YE"}
+            results = {}
+            for fname in ("portfolio_state.json", "portfolio_state_whale.json"):
+                f = DATA_DIR / fname
+                if not f.exists():
+                    results[fname] = "not found"
+                    continue
+                try:
+                    data = json.loads(f.read_text())
+                    before = len(data.get("history", []))
+                    data["history"] = [t for t in data.get("history", []) if t["trade_id"] not in BAD_IDS]
+                    after = len(data["history"])
+                    f.write_text(json.dumps(data, indent=2, ensure_ascii=True), encoding="utf-8")
+                    results[fname] = f"removidas {before - after} entradas ({before} → {after})"
+                    log.info(f"[CLEAN] {fname}: {before} → {after} trades")
+                except Exception as e:
+                    results[fname] = f"erro: {e}"
+            self._json({"ok": True, "results": results})
+
+        elif path == "/upload-portfolio":
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
             try:
