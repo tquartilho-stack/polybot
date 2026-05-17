@@ -167,7 +167,6 @@ async def reconcile_portfolio(portfolio, proxy_address: str, label: str = "") ->
                 end_date = (p.get("endDate") or "").rstrip("Z")
                 if end_date:
                     try:
-                        from datetime import datetime, timezone
                         end_dt = datetime.fromisoformat(end_date.replace("T", "T") if "T" in end_date else end_date + "T23:59:59").replace(tzinfo=timezone.utc)
                         already_expired = (datetime.now(timezone.utc) - end_dt).total_seconds() > 3600
                         if already_expired and cur_price < 0.02:
