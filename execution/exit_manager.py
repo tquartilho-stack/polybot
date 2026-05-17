@@ -168,7 +168,7 @@ class ExitManager:
                 )
                 log.info(f"Ordem SELL mercado: {pos.trade_id} — {result}")
             except Exception:
-                aggressive_price = round(max(exit_price * 0.95, 0.01), 3)
+                aggressive_price = round(max(exit_price * 0.95, pos.entry_price + 0.01), 3)
                 order_args = OrderArgsV2(
                     token_id = token_id,
                     price    = aggressive_price,
