@@ -158,6 +158,23 @@ async def reconcile_portfolio(portfolio, proxy_address: str, label: str = "") ->
         added = 0
         for key, p in real_by_key.items():
             if key not in portfolio_keys:
+                # Não adicionar posições já expiradas com preço residual (ex: Eurovision resolvido mas curPrice=0.001)
+                cur_price = float(p.get("curPrice") or 0)
+                redeemable = p.get("redeemable", False)
+                if cur_price == 0 and redeemable:
+                    continue
+                # Não adicionar posições com preço muito baixo E já expiradas (resolvidas sem redemption)
+                end_date = (p.get("endDate") or "").rstrip("Z")
+                if end_date:
+                    try:
+                        from datetime import datetime, timezone
+                        end_dt = datetime.fromisoformat(end_date.replace("T", "T") if "T" in end_date else end_date + "T23:59:59").replace(tzinfo=timezone.utc)
+                        already_expired = (datetime.now(timezone.utc) - end_dt).total_seconds() > 3600
+                        if already_expired and cur_price < 0.02:
+                            log.info(f"[{label}/RECONCILE] Ignorada posição expirada com preço residual: {p.get('title','')[:40]}")
+                            continue
+                    except:
+                        pass
                 pos_dict = await _build_missing_position(p)
                 if not pos_dict:
                     continue

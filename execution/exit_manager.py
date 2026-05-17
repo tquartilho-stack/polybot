@@ -108,13 +108,14 @@ class ExitManager:
             current_volume = float(market_data.get("volume24hr", 0))
             if pos.volume_baseline > 0 and current_volume > 0:
                 if current_volume / pos.volume_baseline >= VOLUME_SPIKE_MULT:
-                    return "volume_spike"
+                    if current_price > pos.entry_price:
+                        return "volume_spike"
         except:
             pass
 
         now = datetime.now(timezone.utc)
         mins_left = (pos.market.resolves_at - now).total_seconds() / 60
-        if mins_left < 15:
+        if mins_left < 15 and current_price > pos.entry_price:
             return "settlement"
 
         return None
