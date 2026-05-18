@@ -27,7 +27,8 @@ def write(
     portfolio,
     log_lines:      list[str],
 ):
-    trades   = portfolio.history
+    BAD_QUESTIONS = {"GamerLegion vs Natus Vincere"}
+    trades   = [t for t in portfolio.history if not any(q in t.market_question for q in BAD_QUESTIONS)]
     open_pos = portfolio.positions
 
     total_pnl = sum(t.pnl_usdc for t in trades)
