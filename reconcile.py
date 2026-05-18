@@ -153,10 +153,19 @@ async def reconcile_portfolio(portfolio, proxy_address: str, label: str = "") ->
         log.info(f"[{label}/RECONCILE] Resolvida: {pos.trade_id} {pos.market.question[:40]} PnL ${pnl:+.2f}")
 
     # ── Adiciona posições em falta (scorer only) ──────────────────────────────
+    # Condition IDs com loop confirmado — nunca re-adicionar
+    BLACKLISTED_CONDITIONS = {
+        "0x4f60e49a9c6265c2567eedbf183500f8f2f10cd81b1468e4c5c4c1bf6f5c74ae",  # CS GamerLegion
+    }
+
     if label in ("SCORER", ""):
         portfolio_keys = {f"{pos.market.condition_id}_{pos.side.value}" for pos in portfolio.positions}
         added = 0
         for key, p in real_by_key.items():
+            cid_check = p.get("conditionId", "")
+            if cid_check in BLACKLISTED_CONDITIONS:
+                log.info(f"[{label}/RECONCILE] Ignorada posição blacklisted: {p.get('title','')[:40]}")
+                continue
             if key not in portfolio_keys:
                 # Não adicionar posições já expiradas com preço residual (ex: Eurovision resolvido mas curPrice=0.001)
                 cur_price = float(p.get("curPrice") or 0)
