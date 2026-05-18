@@ -21,6 +21,12 @@ PAUSE_FILE_WHALE   = DATA_DIR / "PAUSE_WHALE"
 STARTED_FILE_WHALE = DATA_DIR / "STARTED_WHALE"
 PORT = 8080
 
+# Registry de portfolios em memória — populado pelo main_combined
+_portfolios: dict = {}
+
+def register_portfolio(name: str, portfolio) -> None:
+    _portfolios[name] = portfolio
+
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):

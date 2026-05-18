@@ -26,7 +26,7 @@ from execution.executor     import Executor
 from execution.exit_manager import ExitManager
 from portfolio              import Portfolio
 from dashboard_writer       import write as write_scorer_dashboard
-from server                 import start_server, is_paused, is_started, is_paused_whale, is_started_whale
+from server                 import start_server, is_paused, is_started, is_paused_whale, is_started_whale, register_portfolio
 from reconcile              import reconcile_portfolio
 from pathlib import Path
 import json
@@ -495,6 +495,9 @@ async def main():
                                   state_file=DATA_DIR / "portfolio_state.json")
     whale_portfolio  = Portfolio(max_open=MAX_OPEN_POSITIONS, max_daily=MAX_DAILY_TRADES,
                                   state_file=DATA_DIR / "portfolio_state_whale.json")
+
+    register_portfolio("scorer", scorer_portfolio)
+    register_portfolio("whale", whale_portfolio)
 
     scorer_exit = ExitManager(executor)
     whale_exit  = ExitManager(executor)
