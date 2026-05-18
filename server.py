@@ -59,7 +59,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
 
         if path == "/clean-history":
-            BAD_IDS = {"sync_0x3dbf1d_YE", "sync_0x7382a5_YE", "sync_0xc6ddb1_YE", "sync_0x69f9e1_YE"}
+            BAD_IDS = {"sync_0x3dbf1d_YE", "sync_0x7382a5_YE", "sync_0xc6ddb1_YE", "sync_0x69f9e1_YE", "sync_0x4f60e4_YE"}
+            BAD_QUESTIONS = {"GamerLegion vs Natus Vincere"}
             results = {}
             for fname in ("portfolio_state.json", "portfolio_state_whale.json"):
                 f = DATA_DIR / fname
