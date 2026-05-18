@@ -163,6 +163,10 @@ async def reconcile_portfolio(portfolio, proxy_address: str, label: str = "") ->
                 redeemable = p.get("redeemable", False)
                 if cur_price == 0 and redeemable:
                     continue
+                # Não adicionar posições já resolvidas com preço >= 0.95 (aguardam redemption automática)
+                if cur_price >= 0.95:
+                    log.info(f"[{label}/RECONCILE] Ignorada posição resolvida (curPrice={cur_price}): {p.get('title','')[:40]}")
+                    continue
                 # Não adicionar posições com preço muito baixo E já expiradas (resolvidas sem redemption)
                 end_date = (p.get("endDate") or "").rstrip("Z")
                 if end_date:
