@@ -69,7 +69,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     data = json.loads(f.read_text())
                     before = len(data.get("history", []))
-                    data["history"] = [t for t in data.get("history", []) if t["trade_id"] not in BAD_IDS]
+                    data["history"] = [t for t in data.get("history", []) if t["trade_id"] not in BAD_IDS and not any(q in t.get("market_question", "") for q in BAD_QUESTIONS)]
                     after = len(data["history"])
                     f.write_text(json.dumps(data, indent=2, ensure_ascii=True), encoding="utf-8")
                     results[fname] = f"removidas {before - after} entradas ({before} → {after})"
