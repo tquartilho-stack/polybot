@@ -433,23 +433,32 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
             log.info(f"[WHALE] {len(wallet_map)} posições únicas nas wallets seguidas")
 
-            # Scorer condition_ids para full_size
-            scorer_cids = {p.market.condition_id for p in (scorer_portfolio.positions if scorer_portfolio else [])}
-
             new_trades = 0
             bought_questions: set[str] = set()  # dedup por question dentro do ciclo
+
+            # Fetch antecipado de todos os mercados para poder ordenar
             async with httpx.AsyncClient() as client:
-                for (cid, side_str), wallets_with_pos in wallet_map.items():
-                    if not portfolio.can_trade():
-                        break
+                market_cache: dict[tuple, object] = {}
+                for (cid, side_str) in list(wallet_map.keys()):
                     if portfolio.already_open(cid):
                         continue
                     if _has_opposite_side(portfolio, cid, Side.YES if side_str == "YES" else Side.NO):
                         continue
+                    m = await fetch_market_info(client, cid)
+                    if m:
+                        market_cache[(cid, side_str)] = m
 
-                    market = await fetch_market_info(client, cid)
-                    if not market:
-                        continue
+                # Ordena: mais wallets primeiro, depois resolves_at ascendente
+                sorted_positions = sorted(
+                    [(k, wallet_map[k]) for k in market_cache],
+                    key=lambda x: (-len(x[1]), market_cache[x[0]].hours_to_resolve)
+                )
+
+                for (cid, side_str), wallets_with_pos in sorted_positions:
+                    if not portfolio.can_trade():
+                        break
+
+                    market = market_cache[(cid, side_str)]
 
                     # Dedup por question — evita comprar múltiplos sub-mercados do mesmo evento
                     q_key = f"{market.question}|{side_str}"
@@ -460,29 +469,37 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
                     side  = Side.YES if side_str == "YES" else Side.NO
                     price = market.yes_price if side == Side.YES else market.no_price
-
-                    # Full size se scorer também tem posição no mesmo mercado
-                    is_full = cid in scorer_cids
                     n_wallets = len(wallets_with_pos)
+
+                    # Size por nº de wallets
+                    if n_wallets >= 4:
+                        size_usdc = FULL_SIZE_USDC
+                        size_label = "FULL"
+                    elif n_wallets >= 2:
+                        size_usdc = HALF_SIZE_USDC
+                        size_label = "HALF"
+                    else:
+                        size_usdc = HALF_SIZE_USDC / 2  # quarter = $5
+                        size_label = "QUARTER"
 
                     sig = AgentSignal(
                         agent           = AgentName.WHALE_COPY,
                         market          = market,
                         side            = side,
-                        confidence      = 1.0 if is_full else 0.5,
-                        reason          = f"{n_wallets} wallet(s) seguidas em {side_str} @ {price:.2f}" + (" [FULL]" if is_full else " [HALF]"),
+                        confidence      = min(1.0, n_wallets / 4),
+                        reason          = f"{n_wallets} wallet(s) em {side_str} @ {price:.2f} [{size_label}]",
                         suggested_price = price + 0.01,
                     )
 
                     from consensus import TradeDecision
                     decision = TradeDecision(
-                        market          = market,
-                        side            = side,
-                        consensus_count = 2 if is_full else 1,
-                        size_usdc       = FULL_SIZE_USDC if is_full else HALF_SIZE_USDC,
-                        entry_price     = price + 0.01,
+                        market            = market,
+                        side              = side,
+                        consensus_count   = n_wallets,
+                        size_usdc         = size_usdc,
+                        entry_price       = price + 0.01,
                         target_exit_price = round(price + 0.01 + 0.90 * (1.0 - (price + 0.01)), 4),
-                        signals         = [sig],
+                        signals           = [sig],
                     )
 
                     pos = executor.execute(decision)
@@ -490,7 +507,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         portfolio.add_position(pos)
                         bought_questions.add(q_key)
                         new_trades += 1
-                        log.info(f"[WHALE/COPY] {side_str} {market.question[:50]} @ {price:.2f} ({'FULL' if is_full else 'HALF'}) — {n_wallets} wallet(s)")
+                        log.info(f"[WHALE/COPY] {side_str} {market.question[:50]} @ {price:.2f} [{size_label}] — {n_wallets} wallet(s) {market.hours_to_resolve:.0f}h")
 
 
             if new_trades:
