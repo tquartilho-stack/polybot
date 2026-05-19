@@ -440,6 +440,11 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             multi = [(k, v) for k, v in wallet_map.items() if len(v) >= 2]
             log.info(f"[WHALE] {len(multi)} posições com 2+ wallets")
 
+            # Blacklist de questions a ignorar
+            WHALE_QUESTION_BLACKLIST = [
+                "rihanna",
+            ]
+
             new_trades = 0
             bought_questions: set[str] = set()  # dedup por question dentro do ciclo
 
@@ -466,6 +471,11 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         break
 
                     market = market_cache[(cid, side_str)]
+
+                    # Blacklist de questions
+                    if any(b.lower() in market.question.lower() for b in WHALE_QUESTION_BLACKLIST):
+                        log.info(f"[WHALE] Blacklist: {market.question[:50]}")
+                        continue
 
                     # Dedup por question — evita comprar múltiplos sub-mercados do mesmo evento
                     q_key = f"{market.question}|{side_str}"
