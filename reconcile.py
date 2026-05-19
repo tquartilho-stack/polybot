@@ -47,10 +47,16 @@ async def _fetch_clob_price(client: httpx.AsyncClient, token_id: str) -> float:
         return 0.0
 
 
+BLACKLISTED_CONDITIONS = {
+    "0x4f60e49a9c6265c2567eedbf183500f8f2f10cd81b1468e4c5c4c1bf6f5c74ae",  # CS GamerLegion NaVi
+}
+
 async def _build_missing_position(p: dict) -> dict | None:
     """Constrói dict de posição a partir de dados da Data API."""
     try:
         cid      = p.get("conditionId", "")
+        if cid in BLACKLISTED_CONDITIONS:
+            return None
         token_id = p.get("asset", "")
         outcome  = p.get("outcome", "YES").strip().upper()
         if outcome not in ("YES", "NO"):
@@ -154,10 +160,6 @@ async def reconcile_portfolio(portfolio, proxy_address: str, label: str = "") ->
 
     # ── Adiciona posições em falta (scorer only) ──────────────────────────────
     # Condition IDs com loop confirmado — nunca re-adicionar
-    BLACKLISTED_CONDITIONS = {
-        "0x4f60e49a9c6265c2567eedbf183500f8f2f10cd81b1468e4c5c4c1bf6f5c74ae",  # CS GamerLegion
-    }
-
     if label in ("SCORER", ""):
         portfolio_keys = {f"{pos.market.condition_id}_{pos.side.value}" for pos in portfolio.positions}
         added = 0
