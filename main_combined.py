@@ -15,7 +15,7 @@ from rich.table   import Table
 from config import (
     POLY_PRIVATE_KEY, POLY_API_KEY, POLY_API_SECRET, POLY_API_PASSPHRASE, POLY_PROXY_ADDRESS,
     RUN_INTERVAL_MINS, MAX_OPEN_POSITIONS, MAX_DAILY_TRADES,
-    GAMMA_API, CLAUDE_MODEL,
+    GAMMA_API, CLAUDE_MODEL, FULL_SIZE_USDC, HALF_SIZE_USDC,
 )
 from data.fetcher           import get_filtered_markets
 from data.wallet_scanner    import get_top_wallets
@@ -56,6 +56,9 @@ COST_PER_CALL  = 0.017  # estimativa por batch
 
 _log_buffer_scorer: list[str] = []
 _log_buffer_whale:  list[str] = []
+
+# Posições reais da Poly (scorer proxy)
+_real_positions: dict = {"scorer": []}
 
 _scorer_cycle = 0
 _whale_cycle  = 0
