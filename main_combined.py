@@ -433,6 +433,13 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
             log.info(f"[WHALE] {len(wallet_map)} posições únicas nas wallets seguidas")
 
+            # Breakdown por nº de wallets
+            from collections import Counter
+            breakdown = Counter(len(v) for v in wallet_map.values())
+            log.info(f"[WHALE] Breakdown: {dict(sorted(breakdown.items(), reverse=True))}")
+            multi = [(k, v) for k, v in wallet_map.items() if len(v) >= 2]
+            log.info(f"[WHALE] {len(multi)} posições com 2+ wallets")
+
             new_trades = 0
             bought_questions: set[str] = set()  # dedup por question dentro do ciclo
 
