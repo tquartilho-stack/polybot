@@ -443,7 +443,8 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
                     # Dedup por question — evita comprar múltiplos sub-mercados do mesmo evento
                     q_key = f"{market.question}|{side_str}"
-                    if q_key in bought_questions:
+                    q_opposite = f"{market.question}|{'NO' if side_str == 'YES' else 'YES'}"
+                    if q_key in bought_questions or q_opposite in bought_questions:
                         log.info(f"[WHALE] Dedup por question: {market.question[:50]} {side_str}")
                         continue
 
