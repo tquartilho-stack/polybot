@@ -334,14 +334,24 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
     async def fetch_wallet_positions(client, address):
         try:
-            r = await client.get(
-                f"{POLY_DATA_API}/positions",
-                params={"user": address, "sizeThreshold": "0.01"},
-                timeout=10,
-            )
-            r.raise_for_status()
-            d = r.json()
-            return d if isinstance(d, list) else []
+            all_positions = []
+            offset = 0
+            limit = 100
+            while True:
+                r = await client.get(
+                    f"{POLY_DATA_API}/positions",
+                    params={"user": address, "sizeThreshold": "0.01", "limit": limit, "offset": offset},
+                    timeout=15,
+                )
+                r.raise_for_status()
+                d = r.json()
+                if not isinstance(d, list) or not d:
+                    break
+                all_positions.extend(d)
+                if len(d) < limit:
+                    break
+                offset += limit
+            return all_positions
         except:
             return []
 
@@ -418,7 +428,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     cid  = pos.get("conditionId", "")
                     side = pos.get("outcome", "").upper()
                     cur_price = float(pos.get("curPrice") or 0)
-                    if cid and side in ("YES", "NO") and cur_price > 0 and cur_price < 0.95:
+                    if cid and side in ("YES", "NO") and cur_price > 0.05 and cur_price < 0.95:
                         wallet_map[(cid, side)].add(addr)
 
             log.info(f"[WHALE] {len(wallet_map)} posições únicas nas wallets seguidas")
