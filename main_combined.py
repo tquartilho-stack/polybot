@@ -451,14 +451,22 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             # Fetch antecipado de todos os mercados para poder ordenar
             async with httpx.AsyncClient() as client:
                 market_cache: dict[tuple, object] = {}
+                skipped_open = 0
+                skipped_fetch = 0
                 for (cid, side_str) in list(wallet_map.keys()):
                     if portfolio.already_open(cid):
+                        skipped_open += 1
                         continue
                     if _has_opposite_side(portfolio, cid, Side.YES if side_str == "YES" else Side.NO):
+                        skipped_open += 1
                         continue
                     m = await fetch_market_info(client, cid)
                     if m:
                         market_cache[(cid, side_str)] = m
+                    else:
+                        skipped_fetch += 1
+
+                log.info(f"[WHALE] market_cache={len(market_cache)} skipped_open={skipped_open} skipped_fetch={skipped_fetch}")
 
                 # Ordena: mais wallets primeiro, depois resolves_at ascendente
                 sorted_positions = sorted(
