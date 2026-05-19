@@ -96,26 +96,10 @@ class ExitManager:
         if current_price >= pos.target_exit:
             return "target"
 
-        try:
-            r = await http.get(
-                f"{GAMMA_API}/markets",
-                params={"conditionIds": pos.market.condition_id},
-                timeout=10,
-            )
-            r.raise_for_status()
-            data = r.json()
-            market_data = data[0] if isinstance(data, list) else data
-            current_volume = float(market_data.get("volume24hr", 0))
-            if pos.volume_baseline > 0 and current_volume > 0:
-                if current_volume / pos.volume_baseline >= VOLUME_SPIKE_MULT:
-                    if current_price > pos.entry_price:
-                        return "volume_spike"
-        except:
-            pass
-
-        now = datetime.now(timezone.utc)
-        mins_left = (pos.market.resolves_at - now).total_seconds() / 60
-        if mins_left < 15 and current_price > pos.entry_price:
+        # Settlement: apenas quando mercado resolveu de facto
+        if current_price >= 0.95:
+            return "settlement"
+        if current_price <= 0.05 and pos.side == Side.NO:
             return "settlement"
 
         return None
