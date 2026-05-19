@@ -474,8 +474,10 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     key=lambda x: (-len(x[1]), market_cache[x[0]].hours_to_resolve)
                 )
 
+                log.info(f"[WHALE] sorted_positions={len(sorted_positions)} para processar")
                 for (cid, side_str), wallets_with_pos in sorted_positions:
                     if not portfolio.can_trade():
+                        log.info(f"[WHALE] can_trade=False — stop")
                         break
 
                     market = market_cache[(cid, side_str)]
