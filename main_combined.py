@@ -15,7 +15,7 @@ from rich.table   import Table
 from config import (
     POLY_PRIVATE_KEY, POLY_API_KEY, POLY_API_SECRET, POLY_API_PASSPHRASE, POLY_PROXY_ADDRESS,
     RUN_INTERVAL_MINS, MAX_OPEN_POSITIONS, MAX_DAILY_TRADES,
-    GAMMA_API, CLAUDE_MODEL, FULL_SIZE_USDC, HALF_SIZE_USDC,
+    GAMMA_API, CLAUDE_MODEL,
 )
 from data.fetcher           import get_filtered_markets
 from data.wallet_scanner    import get_top_wallets
@@ -56,9 +56,6 @@ COST_PER_CALL  = 0.017  # estimativa por batch
 
 _log_buffer_scorer: list[str] = []
 _log_buffer_whale:  list[str] = []
-
-# Posições reais da Poly (scorer proxy)
-_real_positions: dict = {"scorer": []}
 
 _scorer_cycle = 0
 _whale_cycle  = 0
@@ -106,7 +103,7 @@ def _hours_left(resolves_at) -> str:
     return f"{h/24:.1f}d"
 
 
-def _write_dashboard(file: Path, cycle, markets_total, markets_scored, signals, consensus_full, decisions, portfolio, log_buf):
+def _write_dashboard(file: Path, cycle, markets_total, markets_scored, signals, consensus_full, decisions, portfolio, log_buf, real_pos=None):
     from datetime import timedelta
     trades    = portfolio.history
     open_pos  = portfolio.positions
@@ -250,7 +247,7 @@ async def scorer_loop(executor, portfolio, exit_manager, whale_portfolio=None):
         try:
             if len(portfolio.positions) >= portfolio.max_open:
                 log.info(f"[SCORER] Máximo de posições atingido — a saltar scoring.")
-                _write_dashboard(DATA_DIR / "dashboard_data.json", _scorer_cycle, 0, 0, {}, 0, [], portfolio, list(_log_buffer_scorer))
+                _write_dashboard(DATA_DIR / "dashboard_data.json", _scorer_cycle, 0, 0, {}, 0, [], portfolio, list(_log_buffer_scorer), real_pos=_real_positions.get("scorer"))
                 await asyncio.sleep(RUN_INTERVAL_MINS * 60)
                 continue
 
@@ -300,7 +297,7 @@ async def scorer_loop(executor, portfolio, exit_manager, whale_portfolio=None):
                     _exit_task_scorer = asyncio.create_task(_exit_background(portfolio, exit_manager, "SCORER"))
 
             console.print(f"[bold cyan]{portfolio.summary()}")
-            _write_dashboard(DATA_DIR / "dashboard_data.json", _scorer_cycle, len(all_markets), len(scored), signals, consensus_full, decisions, portfolio, list(_log_buffer_scorer))
+            _write_dashboard(DATA_DIR / "dashboard_data.json", _scorer_cycle, len(all_markets), len(scored), signals, consensus_full, decisions, portfolio, list(_log_buffer_scorer), real_pos=_real_positions.get("scorer"))
 
         except Exception as e:
             log.error(f"[SCORER] Erro: {e}", exc_info=True)
@@ -425,6 +422,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             scorer_cids = {p.market.condition_id for p in (scorer_portfolio.positions if scorer_portfolio else [])}
 
             new_trades = 0
+            bought_questions: set[str] = set()  # dedup por question dentro do ciclo
             async with httpx.AsyncClient() as client:
                 for (cid, side_str), wallets_with_pos in wallet_map.items():
                     if not portfolio.can_trade():
@@ -436,6 +434,12 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
                     market = await fetch_market_info(client, cid)
                     if not market:
+                        continue
+
+                    # Dedup por question — evita comprar múltiplos sub-mercados do mesmo evento
+                    q_key = f"{market.question}|{side_str}"
+                    if q_key in bought_questions:
+                        log.info(f"[WHALE] Dedup por question: {market.question[:50]} {side_str}")
                         continue
 
                     side  = Side.YES if side_str == "YES" else Side.NO
@@ -468,8 +472,10 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     pos = executor.execute(decision)
                     if pos:
                         portfolio.add_position(pos)
+                        bought_questions.add(q_key)
                         new_trades += 1
                         log.info(f"[WHALE/COPY] {side_str} {market.question[:50]} @ {price:.2f} ({'FULL' if is_full else 'HALF'}) — {n_wallets} wallet(s)")
+
 
             if new_trades:
                 log.info(f"[WHALE] {new_trades} novas posições abertas")
