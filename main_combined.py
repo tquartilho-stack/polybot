@@ -15,7 +15,7 @@ from rich.table   import Table
 from config import (
     POLY_PRIVATE_KEY, POLY_API_KEY, POLY_API_SECRET, POLY_API_PASSPHRASE, POLY_PROXY_ADDRESS,
     RUN_INTERVAL_MINS, MAX_OPEN_POSITIONS, MAX_DAILY_TRADES,
-    GAMMA_API, CLAUDE_MODEL,
+    GAMMA_API, CLAUDE_MODEL, FULL_SIZE_USDC, HALF_SIZE_USDC,
 )
 from data.fetcher           import get_filtered_markets
 from data.wallet_scanner    import get_top_wallets
@@ -56,6 +56,9 @@ COST_PER_CALL  = 0.017  # estimativa por batch
 
 _log_buffer_scorer: list[str] = []
 _log_buffer_whale:  list[str] = []
+
+# Posições reais da Poly (scorer proxy)
+_real_positions: dict = {"scorer": []}
 
 _scorer_cycle = 0
 _whale_cycle  = 0
@@ -323,6 +326,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
     from data.models import Side, Market, AgentSignal, AgentName
 
     POLY_DATA_API = "https://data-api.polymarket.com"
+    _first_run = True
 
     if portfolio.positions:
         log.info(f"[WHALE] {len(portfolio.positions)} posições carregadas — exit manager a iniciar...")
@@ -378,6 +382,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
     while True:
         if not is_started_whale() or is_paused_whale():
+            _first_run = True
             await asyncio.sleep(10)
             continue
 
@@ -492,7 +497,10 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
         except Exception as e:
             log.error(f"[WHALE] Erro: {e}", exc_info=True)
 
-        await asyncio.sleep(RUN_INTERVAL_MINS * 60)
+        if _first_run:
+            _first_run = False
+        else:
+            await asyncio.sleep(RUN_INTERVAL_MINS * 60)
 
 
 # ── Utils ─────────────────────────────────────────────────────────────────────
