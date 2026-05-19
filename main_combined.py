@@ -26,7 +26,7 @@ from execution.executor     import Executor
 from execution.exit_manager import ExitManager
 from portfolio              import Portfolio
 from dashboard_writer       import write as write_scorer_dashboard
-from server                 import start_server, is_paused, is_started, is_paused_whale, is_started_whale, register_portfolio
+from server                 import start_server, is_paused, is_started, is_paused_whale, is_started_whale
 from reconcile              import reconcile_portfolio
 from pathlib import Path
 import json
@@ -105,7 +105,11 @@ def _hours_left(resolves_at) -> str:
 
 def _write_dashboard(file: Path, cycle, markets_total, markets_scored, signals, consensus_full, decisions, portfolio, log_buf):
     from datetime import timedelta
-    trades    = portfolio.history
+    BAD_QUESTIONS = {"GamerLegion vs Natus Vincere"}
+    BAD_IDS = {"sync_0x3dbf1d_YE", "sync_0x7382a5_YE", "sync_0xc6ddb1_YE", "sync_0x69f9e1_YE", "sync_0x4f60e4_YE"}
+    trades    = [t for t in portfolio.history
+                 if t.trade_id not in BAD_IDS
+                 and not any(q in t.market_question for q in BAD_QUESTIONS)]
     open_pos  = portfolio.positions
     total_pnl = sum(t.pnl_usdc for t in trades)
     wins      = sum(1 for t in trades if t.pnl_usdc > 0)
@@ -495,9 +499,6 @@ async def main():
                                   state_file=DATA_DIR / "portfolio_state.json")
     whale_portfolio  = Portfolio(max_open=MAX_OPEN_POSITIONS, max_daily=MAX_DAILY_TRADES,
                                   state_file=DATA_DIR / "portfolio_state_whale.json")
-
-    register_portfolio("scorer", scorer_portfolio)
-    register_portfolio("whale", whale_portfolio)
 
     scorer_exit = ExitManager(executor)
     whale_exit  = ExitManager(executor)
