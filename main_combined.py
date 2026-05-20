@@ -421,6 +421,9 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             # Agrega: condition_id+side → set de wallets que têm
             from collections import defaultdict
             wallet_map: dict[tuple, set] = defaultdict(set)
+            from datetime import date, timedelta
+            max_end_date = date.today() + timedelta(days=4)
+
             for addr, res in zip(WHALE_COPY_WALLETS, results):
                 if not isinstance(res, list):
                     continue
@@ -428,6 +431,13 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     cid  = pos.get("conditionId", "")
                     side = pos.get("outcome", "").upper()
                     cur_price = float(pos.get("curPrice") or 0)
+                    end_date_str = pos.get("endDate", "")
+                    try:
+                        end_date = date.fromisoformat(end_date_str[:10])
+                    except Exception:
+                        continue
+                    if end_date > max_end_date:
+                        continue
                     if cid and side in ("YES", "NO") and cur_price > 0.05 and cur_price < 0.95:
                         wallet_map[(cid, side)].add(addr)
 
