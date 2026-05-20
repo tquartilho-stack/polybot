@@ -387,7 +387,8 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                 resolves_at    = resolves_at,
                 hours_to_resolve = hours_left,
             )
-        except:
+        except Exception as e:
+            log.info(f"[WHALE/FETCH] erro {condition_id[:12]}: {e}")
             return None
 
     while True:
@@ -475,6 +476,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         market_cache[(cid, side_str)] = m
                     else:
                         skipped_fetch += 1
+                        log.info(f"[WHALE/FETCH] None: {cid[:12]} {side_str}")
 
                 log.info(f"[WHALE] market_cache={len(market_cache)} skipped_open={skipped_open} skipped_fetch={skipped_fetch}")
 
