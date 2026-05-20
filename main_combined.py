@@ -488,6 +488,8 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
                 log.info(f"[WHALE] sorted_positions={len(sorted_positions)} para processar")
                 for (cid, side_str), wallets_with_pos in sorted_positions:
+                    m_debug = market_cache.get((cid, side_str))
+                    log.info(f"[WHALE] LOOP: {cid[:12]} {side_str} q={m_debug.question[:40] if m_debug else chr(63)}")
                     if not portfolio.can_trade():
                         log.info(f"[WHALE] can_trade=False — stop")
                         break
