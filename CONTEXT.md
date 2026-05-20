@@ -1,10 +1,10 @@
-# PolyBot — CONTEXT.md (actualizado 2026-05-19 ~16h)
+# PolyBot — CONTEXT.md (actualizado 2026-05-20 ~20h)
 
 ## Projecto
 Bot de trading Polymarket. Stack: Python 3.11/asyncio, Railway EU West, Claude Sonnet 4.6 + Haiku 4.5.
 - Repo: `tquartilho-stack/polybot` → `https://github.com/tquartilho-stack/polybot`
 - Dashboard: `https://polybot-production-8ef4.up.railway.app`
-- Saldo actual: ~$130 USDC na Polygon
+- Saldo actual: ~$130 USDC na Polygon (muito gasto em bets com bugs)
 
 ## Arquitectura
 ```
@@ -54,12 +54,13 @@ git push origin main
 
 ## Proxy Addresses
 - Scorer: 0x0F4902690951B760C451A8f9dc81D72871359E18
-- Whale: ver logs (positions?user=0x...&sizeThreshold=0.01)
+- Whale: usa o mesmo executor/proxy que o scorer
 
 ## Endpoints Úteis
 ```powershell
 Invoke-RestMethod -Uri "https://polybot-production-8ef4.up.railway.app/clean-history" -Method POST
 Invoke-WebRequest -Uri "https://polybot-production-8ef4.up.railway.app/download-portfolio" -OutFile "$env:TEMP\portfolio.json"
+Invoke-WebRequest -Uri "https://polybot-production-8ef4.up.railway.app/download-portfolio?type=whale" -OutFile "$env:TEMP\portfolio_whale.json"
 $p = Invoke-WebRequest -Uri "https://polybot-production-8ef4.up.railway.app/download-portfolio" | Select-Object -ExpandProperty Content | ConvertFrom-Json
 $p.history | Group-Object market_question | Sort-Object Count -Descending | Select-Object -First 10 Name, Count
 git commit --allow-empty -m "force redeploy" && git push origin main
@@ -72,13 +73,15 @@ git commit --allow-empty -m "force redeploy" && git push origin main
 - Arb + Conv + WhaleCopy agents → consensus → compra
 - Exit: target (90% lucro) ou settlement (curPrice >= 0.95)
 
-### Whale — copy trader directo (NOVO 2026-05-19)
-- Ciclo ~30min
-- Busca posições das 4 wallets fixas
-- HALF_SIZE ($10) por defeito
-- FULL_SIZE ($20) se scorer também tem posição no mesmo mercado
-- Ignora curPrice >= 0.95
-- Sem Claude, sem leaderboard
+### Whale — copy trader directo
+- Ciclo ~30min, arranca imediatamente após Start no dashboard (_first_run)
+- Busca posições das 4 wallets fixas com paginação completa
+- Filtro: curPrice 0.05-0.95 E endDate <= hoje+4 dias
+- Size: 1 wallet→QUARTER ($5), 2-3 wallets→HALF ($10), 4+ wallets→FULL ($20)
+- Dedup por question (bloqueia YES e NO do mesmo mercado no mesmo ciclo)
+- Blacklist: "rihanna" (WHALE_QUESTION_BLACKLIST em main_combined.py)
+- Sem Claude, sem scorer, sem leaderboard
+- Fetch antecipado de todos os mercados → ordena por nº wallets desc + hours_to_resolve asc
 
 ### Wallets Whale (fixas)
 ```
@@ -108,19 +111,28 @@ git commit --allow-empty -m "force redeploy" && git push origin main
 
 ### main_combined.py
 - _real_positions dict global com posições reais da Poly
-- _write_dashboard filtra BAD_IDS e BAD_QUESTIONS
-- open_positions no dashboard usa dados reais da Poly
-- whale_loop reescrito como copy trader
+- _write_dashboard com real_pos=None para whale
+- FULL_SIZE_USDC e HALF_SIZE_USDC importados do config
+- whale_loop: paginação, filtro endDate, dedup question+oposto, blacklist, _first_run
+- Logs de debug ainda activos: breakdown wallet_map, market_cache stats, sorted_positions, "A tentar executar"
+
+## Problema Activo (2026-05-20 ~20h)
+- Whale a filtrar correctamente (139 posições únicas vs 273 antes)
+- Mas Rihanna ainda passa o filtro endDate apesar de ter endDate 2026-07-22
+- Suspeita: sub-mercados da Rihanna têm endDate diferente do evento principal
+- A verificar: `$r | Where-Object { $_.title -like "*Rihanna*" } | Select-Object title, endDate`
 
 ## Loops Detectados e Corrigidos
 - Eurovision/CS: ~812 entradas — fix endDate expirado
 - CS GamerLegion NaVi: ~32/ciclo — fix blacklist condition_id
 - CS BetBoom NaVi: ~46 entradas — fix blacklist prefixo 0x9046b0
+- Rihanna: ~200+ sub-mercados — blacklist "rihanna" aplicada
 
 ## Backup
 - Whale original: C:\Users\tquar\polybot\backup_whale_original\
 
-## Estado (2026-05-19 ~16h)
-- Scorer: a correr, ~55 trades histórico
-- Whale: nova lógica copy trader deploiada (aguardar primeiro ciclo)
+## Estado (2026-05-20 ~20h)
+- Scorer: parado
+- Whale: a correr, filtro endDate+4 dias activo, blacklist Rihanna activa
+- Problema aberto: Rihanna passa filtro endDate — investigar endDate dos sub-mercados
 - Se aparecerem novos loops: adicionar condition_id a BLACKLISTED_CONDITIONS ou prefixo a BLACKLISTED_PREFIXES em reconcile.py, e market_question a BAD_QUESTIONS em server.py
