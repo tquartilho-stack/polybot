@@ -365,16 +365,16 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             if isinstance(prices_raw, str):
                 prices_raw = _json.loads(prices_raw)
             liquidity = float(m.get("liquidity", 0))
-            if liquidity < 500:
-                return None
             end = (m.get("endDate") or m.get("endDateIso", "")).rstrip("Z")
             if not end:
+                log.info(f"[WHALE/FETCH] sem endDate: {condition_id[:12]}")
                 return None
             if "T" not in end:
                 end += "T23:59:59"
             resolves_at = datetime.fromisoformat(end).replace(tzinfo=timezone.utc)
             hours_left = (resolves_at - datetime.now(timezone.utc)).total_seconds() / 3600
             if hours_left < 1:
+                log.info(f"[WHALE/FETCH] expirado ({hours_left:.1f}h): {condition_id[:12]}")
                 return None
             return Market(
                 condition_id   = m["conditionId"],
@@ -494,14 +494,19 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
                     # Blacklist de questions
                     if any(b.lower() in market.question.lower() for b in WHALE_QUESTION_BLACKLIST):
-                        log.info(f"[WHALE] Blacklist: {market.question[:50]}")
+                        log.info(f"[WHALE] SKIP blacklist: {market.question[:50]}")
                         continue
 
                     # Dedup por question — evita comprar múltiplos sub-mercados do mesmo evento
                     q_key = f"{market.question}|{side_str}"
                     q_opposite = f"{market.question}|{'NO' if side_str == 'YES' else 'YES'}"
                     if q_key in bought_questions or q_opposite in bought_questions:
-                        log.info(f"[WHALE] Dedup por question: {market.question[:50]} {side_str}")
+                        log.info(f"[WHALE] SKIP dedup: {market.question[:50]} {side_str}")
+                        continue
+
+                    # Verifica already_open (pode ter mudado desde o fetch antecipado)
+                    if portfolio.already_open(cid):
+                        log.info(f"[WHALE] SKIP already_open: {market.question[:50]}")
                         continue
 
                     side  = Side.YES if side_str == "YES" else Side.NO
@@ -539,13 +544,15 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         signals           = [sig],
                     )
 
-                    log.info(f"[WHALE] A tentar executar: {side_str} {market.question[:40]} @ {price:.2f} [{size_label}]")
+                    log.info(f"[WHALE] EXEC: {side_str} {market.question[:40]} @ {price:.2f} liq={market.liquidity_usdc:.0f} [{size_label}] {len(wallets_with_pos)}w")
                     pos = executor.execute(decision)
                     if pos:
                         portfolio.add_position(pos)
                         bought_questions.add(q_key)
                         new_trades += 1
-                        log.info(f"[WHALE/COPY] {side_str} {market.question[:50]} @ {price:.2f} [{size_label}] — {n_wallets} wallet(s) {market.hours_to_resolve:.0f}h")
+                        log.info(f"[WHALE/COPY] OK {side_str} {market.question[:50]} @ {price:.2f} [{size_label}] — {n_wallets} wallet(s) {market.hours_to_resolve:.0f}h")
+                    else:
+                        log.info(f"[WHALE] EXEC FALHOU: {side_str} {market.question[:40]}")
 
 
             if new_trades:
