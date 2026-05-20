@@ -529,6 +529,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         signals           = [sig],
                     )
 
+                    log.info(f"[WHALE] A tentar executar: {side_str} {market.question[:40]} @ {price:.2f} [{size_label}]")
                     pos = executor.execute(decision)
                     if pos:
                         portfolio.add_position(pos)
