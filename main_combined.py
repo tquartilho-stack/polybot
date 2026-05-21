@@ -389,7 +389,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             wallet_map: dict[tuple, set] = defaultdict(set)
             pos_data: dict[tuple, dict] = {}  # guarda dados da posição para usar depois
 
-            cutoff = date.today() + timedelta(days=2)
+            cutoff = date.today() + timedelta(hours=24)
 
             for addr, res in zip(WHALE_COPY_WALLETS, results):
                 if not isinstance(res, list):
@@ -507,6 +507,8 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     signals           = [sig],
                 )
 
+                if hours_left <= 0:
+                    continue
                 log.info(f"[WHALE] {side_str} {title[:45]} @ {price:.2f} [{n}w] {hours_left:.0f}h")
                 try:
                     pos = executor.execute(decision)
