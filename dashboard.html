@@ -24,7 +24,7 @@
   .agent-btn.on-whale .dot{background:var(--purple);box-shadow:0 0 6px var(--purple);}
   .agent-btn.on-scorer{border-color:rgba(0,230,118,.2);color:var(--green);}
   .agent-btn.on-whale{border-color:rgba(224,64,251,.2);color:var(--purple);}
-  .top-bar{display:flex;align-items:center;gap:24px;padding:16px 28px;border-bottom:1px solid var(--border);}
+  .top-bar{display:flex;align-items:center;gap:24px;padding:16px 28px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
   .pnl-block{display:flex;flex-direction:column;gap:2px;}
   .pnl-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
   .pnl-val{font-family:var(--mono);font-size:28px;font-weight:600;}
@@ -36,7 +36,7 @@
   .section{padding:20px 28px 24px;}
   .section-title{font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
   .section-title span{color:var(--text);font-family:var(--mono);}
-  .table-wrap{background:var(--s1);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .table-wrap{background:var(--s1);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:24px;}
   table{width:100%;border-collapse:collapse;}
   th{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:9px 14px;text-align:left;border-bottom:1px solid var(--border);font-weight:500;background:var(--s2);}
   td{padding:10px 14px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px;vertical-align:middle;}
@@ -80,33 +80,35 @@
 </div>
 
 <div class="section">
-  <div class="section-title">Todas as Posições <span id="all-count">0</span></div>
+  <div class="section-title">Posições Abertas <span id="open-count">0</span></div>
   <div class="table-wrap">
     <table>
       <thead><tr>
-        <th>Mercado</th>
-        <th>Side</th>
-        <th>Compra/Share</th>
-        <th>Investido</th>
-        <th>Cur Price</th>
-        <th>Cash PNL</th>
-        <th>End Date</th>
+        <th>Mercado</th><th>Side</th><th>Compra/Share</th><th>Investido</th><th>Cur Price</th><th>P&L Actual</th><th>End Date</th>
       </tr></thead>
-      <tbody id="all-tbody"><tr><td colspan="7" class="empty">a carregar...</td></tr></tbody>
+      <tbody id="open-tbody"><tr><td colspan="7" class="empty">a carregar...</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="section-title">Histórico <span id="hist-count">0</span></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Mercado</th><th>Side</th><th>Compra/Share</th><th>Investido</th><th>Venda/Share</th><th>PNL</th><th>Data</th>
+      </tr></thead>
+      <tbody id="hist-tbody"><tr><td colspan="7" class="empty">a carregar...</td></tr></tbody>
     </table>
   </div>
 </div>
 
 <script>
 const PROXY = '/poly-proxy';
-const PROXY_ADDR = '0x0F4902690951B760C451A8f9dc81D72871359E18';
+const ADDR  = '0x0F4902690951B760C451A8f9dc81D72871359E18';
 
 async function toggleAgent(agent) {
   const btn = document.getElementById('btn-'+agent);
   const isOn = btn.classList.contains('on-'+agent);
-  const ep = isOn
-    ? (agent === 'scorer' ? '/stop' : '/stop-whale')
-    : (agent === 'scorer' ? '/start' : '/start-whale');
+  const ep = isOn ? (agent==='scorer'?'/stop':'/stop-whale') : (agent==='scorer'?'/start':'/start-whale');
   await fetch(ep, {method:'POST'});
   await checkStatus();
 }
@@ -115,99 +117,122 @@ async function checkStatus() {
   try {
     const r = await fetch('/status');
     const d = await r.json();
-    const bs = document.getElementById('btn-scorer');
-    const bw = document.getElementById('btn-whale');
-    bs.className = 'agent-btn' + (d.started && !d.paused ? ' on-scorer' : '');
-    bw.className = 'agent-btn' + (d.started_whale && !d.paused_whale ? ' on-whale' : '');
+    document.getElementById('btn-scorer').className = 'agent-btn'+(d.started&&!d.paused?' on-scorer':'');
+    document.getElementById('btn-whale').className  = 'agent-btn'+(d.started_whale&&!d.paused_whale?' on-whale':'');
   } catch(e) {}
 }
 
-async function fetchPositions(addr) {
+async function fetchAll(path, params) {
   let all = [], offset = 0;
   while (true) {
-    const url = `${PROXY}?_path=positions&user=${addr}&sizeThreshold=0.01&limit=500&offset=${offset}`;
-    const r = await fetch(url);
+    const qs = Object.entries({...params, offset, limit:500}).map(([k,v])=>`${k}=${v}`).join('&');
+    const r = await fetch(`${PROXY}?_path=${path}&${qs}`);
     if (!r.ok) break;
     const d = await r.json();
-    if (!Array.isArray(d) || !d.length) break;
-    all = all.concat(d);
-    if (d.length < 500) break;
+    const items = Array.isArray(d) ? d : (d.value || d.data || []);
+    if (!items.length) break;
+    all = all.concat(items);
+    if (items.length < 500) break;
     offset += 500;
   }
   return all;
 }
 
 async function loadAll() {
-  document.getElementById('all-tbody').innerHTML = '<tr><td colspan="7" class="empty">a carregar da Poly...</td></tr>';
+  document.getElementById('open-tbody').innerHTML = '<tr><td colspan="7" class="empty">a carregar...</td></tr>';
+  document.getElementById('hist-tbody').innerHTML  = '<tr><td colspan="7" class="empty">a carregar...</td></tr>';
 
-  const all = await fetchPositions(PROXY_ADDR);
+  const [positions, trades] = await Promise.all([
+    fetchAll('positions', {user: ADDR, sizeThreshold: '0.01'}),
+    fetchAll('trades',    {user: ADDR}),
+  ]);
 
-  // Sort: open (0.05-0.95) first by endDate asc, then closed by endDate desc
-  all.sort((a, b) => {
-    const acp = parseFloat(a.curPrice||0), bcp = parseFloat(b.curPrice||0);
-    const aOpen = acp > 0.05 && acp < 0.95;
-    const bOpen = bcp > 0.05 && bcp < 0.95;
-    if (aOpen !== bOpen) return aOpen ? -1 : 1;
-    if (aOpen) return new Date(a.endDate||'9999') - new Date(b.endDate||'9999');
-    return new Date(b.endDate||'0') - new Date(a.endDate||'0');
-  });
+  // ── Open positions from /positions (curPrice 0.05-0.95) ───────────────────
+  const open = positions
+    .filter(p => { const cp = parseFloat(p.curPrice||0); return cp > 0.05 && cp < 0.95; })
+    .sort((a,b) => new Date(a.endDate||'9999') - new Date(b.endDate||'9999'));
 
-  const open   = all.filter(p => { const cp = parseFloat(p.curPrice||0); return cp > 0.05 && cp < 0.95; });
-  const closed = all.filter(p => { const cp = parseFloat(p.curPrice||0); return cp <= 0.05 || cp >= 0.95; });
-
-  document.getElementById('all-count').textContent = all.length;
-  document.getElementById('stat-open').textContent = open.length;
-  document.getElementById('stat-closed').textContent = closed.length;
-
-  const totalPnl = closed.reduce((s, p) => s + parseFloat(p.cashPnl||0), 0);
-  const wins = closed.filter(p => parseFloat(p.cashPnl||0) > 0).length;
-  const wr = closed.length ? (wins/closed.length*100).toFixed(0)+'%' : '—';
-  const invested = open.reduce((s, p) => s + parseFloat(p.initialValue||0), 0);
-
-  const pel = document.getElementById('pnl-total');
-  pel.textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
-  pel.className = 'pnl-val ' + (totalPnl > 0 ? 'pos' : totalPnl < 0 ? 'neg' : 'neu');
-  document.getElementById('stat-wr').textContent = wr;
-  document.getElementById('stat-invested').textContent = '$'+invested.toFixed(2);
-  document.getElementById('last-update').textContent = '· ' + new Date().toLocaleTimeString('pt-PT');
-
-  if (!all.length) {
-    document.getElementById('all-tbody').innerHTML = '<tr><td colspan="7" class="empty">sem posições</td></tr>';
-    return;
+  // ── Closed from /trades: group by conditionId+outcome ────────────────────
+  const grouped = {};
+  for (const t of trades) {
+    const key = `${t.conditionId}|${t.outcome}`;
+    if (!grouped[key]) grouped[key] = {buys:[], sells:[], title:t.title, outcome:t.outcome, lastTs:0};
+    if (t.side === 'BUY')  grouped[key].buys.push(t);
+    else                   grouped[key].sells.push(t);
+    if (t.timestamp > grouped[key].lastTs) grouped[key].lastTs = t.timestamp;
   }
 
-  document.getElementById('all-tbody').innerHTML = all.map(p => {
+  const closed = Object.values(grouped)
+    .filter(g => g.sells.length > 0)
+    .map(g => {
+      const buyVal  = g.buys.reduce((s,t)  => s + t.price * t.size, 0);
+      const sellVal = g.sells.reduce((s,t) => s + t.price * t.size, 0);
+      const buySize = g.buys.reduce((s,t)  => s + t.size, 0);
+      const avgBuy  = buySize > 0 ? buyVal / buySize : 0;
+      const sellSize= g.sells.reduce((s,t) => s + t.size, 0);
+      const avgSell = sellSize > 0 ? sellVal / sellSize : 0;
+      const pnl     = sellVal - buyVal;
+      return {title: g.title, outcome: g.outcome, avgBuy, avgSell, invested: buyVal, pnl, lastTs: g.lastTs};
+    })
+    .sort((a,b) => b.lastTs - a.lastTs);
+
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  const totalPnl  = closed.reduce((s,c) => s + c.pnl, 0);
+  const wins      = closed.filter(c => c.pnl > 0).length;
+  const wr        = closed.length ? (wins/closed.length*100).toFixed(0)+'%' : '—';
+  const invested  = open.reduce((s,p) => s + parseFloat(p.initialValue||0), 0);
+
+  const pel = document.getElementById('pnl-total');
+  pel.textContent = (totalPnl>=0?'+':'')+'$'+totalPnl.toFixed(2);
+  pel.className = 'pnl-val '+(totalPnl>0?'pos':totalPnl<0?'neg':'neu');
+  document.getElementById('stat-open').textContent     = open.length;
+  document.getElementById('stat-closed').textContent   = closed.length;
+  document.getElementById('stat-wr').textContent       = wr;
+  document.getElementById('stat-invested').textContent = '$'+invested.toFixed(2);
+  document.getElementById('open-count').textContent    = open.length;
+  document.getElementById('hist-count').textContent    = closed.length;
+  document.getElementById('last-update').textContent   = '· '+new Date().toLocaleTimeString('pt-PT');
+
+  // ── Render open ───────────────────────────────────────────────────────────
+  document.getElementById('open-tbody').innerHTML = open.length ? open.map(p => {
     const side    = (p.outcome||'').toUpperCase();
     const cp      = parseFloat(p.curPrice||0);
     const avg     = parseFloat(p.avgPrice||0);
     const initVal = parseFloat(p.initialValue||0);
-    const cashPnl = parseFloat(p.cashPnl||0);
+    const curVal  = parseFloat(p.currentValue||cp*parseFloat(p.size||0));
+    const pnl     = curVal - initVal;
     const endDate = (p.endDate||'').substring(0,10);
     const title   = (p.title||'').substring(0,55);
-    const isOpen  = cp > 0.05 && cp < 0.95;
-
-    const sideTag = side === 'YES'
-      ? '<span class="tag tag-yes">YES</span>'
-      : '<span class="tag tag-no">NO</span>';
-
-    const pnlStr = cashPnl !== 0
-      ? `<span class="${cashPnl>0?'pos':'neg'}">${cashPnl>=0?'+':''}$${cashPnl.toFixed(2)}</span>`
-      : '<span style="color:var(--muted)">—</span>';
-
-    const cpStr = isOpen
-      ? `$${cp.toFixed(3)}`
-      : `<span class="${cp>=0.95?'pos':'neg'}">$${cp.toFixed(3)}</span>`;
-
-    return `<tr style="${isOpen?'':'opacity:0.55;'}">
+    const sideTag = `<span class="tag tag-${side.toLowerCase()}">${side}</span>`;
+    const pnlStr  = `<span class="${pnl>0?'pos':pnl<0?'neg':'neu'}">${pnl>=0?'+':''}$${pnl.toFixed(2)}</span>`;
+    return `<tr>
       <td title="${p.title||''}">${title}</td>
       <td>${sideTag}</td>
       <td>$${avg.toFixed(3)}</td>
       <td>$${initVal.toFixed(2)}</td>
-      <td>${cpStr}</td>
+      <td>$${cp.toFixed(3)}</td>
       <td>${pnlStr}</td>
       <td style="color:var(--muted)">${endDate}</td>
     </tr>`;
-  }).join('');
+  }).join('') : '<tr><td colspan="7" class="empty">sem posições abertas</td></tr>';
+
+  // ── Render history ────────────────────────────────────────────────────────
+  document.getElementById('hist-tbody').innerHTML = closed.length ? closed.map(c => {
+    const side    = (c.outcome||'').toUpperCase();
+    const sideTag = `<span class="tag tag-${side.toLowerCase()}">${side}</span>`;
+    const pnlStr  = `<span class="${c.pnl>0?'pos':c.pnl<0?'neg':'neu'}">${c.pnl>=0?'+':''}$${c.pnl.toFixed(2)}</span>`;
+    const date    = c.lastTs ? new Date(c.lastTs*1000).toLocaleDateString('pt-PT') : '—';
+    const title   = (c.title||'').substring(0,55);
+    return `<tr>
+      <td title="${c.title||''}">${title}</td>
+      <td>${sideTag}</td>
+      <td>$${c.avgBuy.toFixed(3)}</td>
+      <td>$${c.invested.toFixed(2)}</td>
+      <td>$${c.avgSell.toFixed(3)}</td>
+      <td>${pnlStr}</td>
+      <td style="color:var(--muted)">${date}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="7" class="empty">sem histórico</td></tr>';
 }
 
 checkStatus();
