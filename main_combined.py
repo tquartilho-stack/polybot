@@ -381,7 +381,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                 )
 
             cutoff_min = date.today() - timedelta(days=1)
-            cutoff_max = date.today() + timedelta(days=2)
+            cutoff_max = date.today() + timedelta(days=1)
 
             wallet_map: dict[tuple, set] = defaultdict(set)
             pos_data: dict[tuple, dict] = {}
@@ -409,13 +409,30 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
             log.info(f"[WHALE] {len(wallet_map)} candidatas ({sum(1 for v in wallet_map.values() if len(v)>=2)} com 2+ wallets)")
 
+            # Fetch posições reais do proxy para dedup fiável
+            from reconcile import fetch_real_positions
+            real_positions = await fetch_real_positions(POLY_PROXY_ADDRESS)
+            real_open_cids = {p.get("conditionId","") for p in real_positions}
+            real_open_keys = {f"{p.get('conditionId','')}_{p.get('outcome','').upper()}" for p in real_positions}
+            # Para cada cid aberto, guarda os sides já abertos
+            real_sides: dict[str, set] = defaultdict(set)
+            for p in real_positions:
+                real_sides[p.get("conditionId","")].add(p.get("outcome","").upper())
+
             # Filtra já abertas e lado oposto
             candidates = {}
             for (cid, side_str), wallets in wallet_map.items():
+                # Já aberto no portfolio local ou na Poly real
                 if portfolio.already_open(cid):
                     continue
+                if cid in real_open_cids and side_str in real_sides.get(cid, set()):
+                    continue
+                # Lado oposto no portfolio local ou na Poly real
                 side_enum = Side.YES if side_str == "YES" else Side.NO
                 if _has_opposite_side(portfolio, cid, side_enum):
+                    continue
+                opposite = "NO" if side_str == "YES" else "YES"
+                if opposite in real_sides.get(cid, set()):
                     continue
                 if scorer_portfolio and scorer_portfolio.already_open(cid):
                     continue

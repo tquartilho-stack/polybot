@@ -69,25 +69,35 @@ class ExitManager:
                 pass
 
         if current_price == 0:
+            # Tenta CLOB midpoint
+            if pos.token_id:
+                try:
+                    r = await http.get(f"{CLOB_API}/midpoint", params={"token_id": pos.token_id}, timeout=5)
+                    r.raise_for_status()
+                    current_price = float(r.json().get("mid", 0))
+                except:
+                    pass
+
+        if current_price == 0:
+            # Fallback: Data API (funciona para mercados desportivos não presentes na Gamma)
             try:
                 r = await http.get(
-                    f"{GAMMA_API}/markets",
-                    params={"conditionIds": pos.market.condition_id},
-                    timeout=10,
+                    "https://data-api.polymarket.com/positions",
+                    params={"user": "0x0F4902690951B760C451A8f9dc81D72871359E18", "sizeThreshold": "0.01", "limit": 500},
+                    timeout=15,
                 )
                 r.raise_for_status()
                 data = r.json()
-                if not data:
-                    return None
-                market_data = data[0] if isinstance(data, list) else data
-                import json as _json
-                prices_raw = market_data.get("outcomePrices", '["0.5","0.5"]')
-                if isinstance(prices_raw, str):
-                    prices_raw = _json.loads(prices_raw)
-                current_price = float(prices_raw[0]) if pos.side == Side.YES else float(prices_raw[1])
+                for p in (data if isinstance(data, list) else []):
+                    if p.get("conditionId","") == pos.market.condition_id and p.get("outcome","").upper() == pos.side.value:
+                        current_price = float(p.get("curPrice") or 0)
+                        break
             except Exception as e:
                 log.warning(f"Falha ao puxar preco {pos.trade_id}: {e}")
                 return None
+
+        if current_price == 0:
+            return None
 
         pos.current_price = current_price
         if current_price > pos.peak_price:
