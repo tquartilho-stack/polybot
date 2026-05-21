@@ -60,7 +60,7 @@ class Handler(BaseHTTPRequestHandler):
             poly_path = flat.pop("_path", "positions")
             url = f"https://data-api.polymarket.com/{poly_path}?{urlencode(flat)}"
             try:
-                req = _ur.Request(url, headers={"Accept":"application/json"})
+                req = _ur.Request(url, headers={"Accept":"application/json","User-Agent":"Mozilla/5.0"})
                 with _ur.urlopen(req, timeout=15) as resp:
                     data = resp.read()
                 self.send_response(200)
