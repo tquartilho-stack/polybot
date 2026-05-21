@@ -466,13 +466,16 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         break
 
                     market = market_cache[(cid, side_str)]
+                    bl = any(b.lower() in market.question.lower() for b in WHALE_QUESTION_BLACKLIST)
+                    dup = cid in bought_cids
+                    log.info(f"[WHALE/ITER] {cid[:10]} {side_str} bl={bl} dup={dup} q={market.question[:30]}")
 
                     # Blacklist
-                    if any(b.lower() in market.question.lower() for b in WHALE_QUESTION_BLACKLIST):
+                    if bl:
                         continue
 
                     # Dedup — não comprar YES e NO do mesmo mercado no mesmo ciclo
-                    if cid in bought_cids:
+                    if dup:
                         continue
 
                     side  = Side.YES if side_str == "YES" else Side.NO
