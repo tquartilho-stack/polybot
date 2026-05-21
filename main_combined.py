@@ -323,7 +323,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
     global _whale_cycle, _exit_task_whale
 
     import httpx
-    import json as _json
+    from datetime import date, timedelta
     from data.models import Side, Market, AgentSignal, AgentName
     from consensus import TradeDecision
 
@@ -338,9 +338,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
         try:
             all_positions = []
             offset = 0
-            max_pages = 5
-            page = 0
-            while page < max_pages:
+            while True:
                 r = await client.get(
                     f"{POLY_DATA_API}/positions",
                     params={"user": address, "sizeThreshold": "0.01", "limit": 100, "offset": offset},
@@ -354,49 +352,10 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                 if len(d) < 100:
                     break
                 offset += 100
-                page += 1
             return all_positions
         except Exception as e:
             log.warning(f"[WHALE] Erro fetch {address[:10]}: {e}")
             return []
-
-    async def fetch_market_info(client, condition_id):
-        try:
-            r = await client.get(f"{GAMMA_API}/markets", params={"conditionIds": condition_id}, timeout=10)
-            r.raise_for_status()
-            data = r.json()
-            if isinstance(data, list):
-                m = next((x for x in data if x.get("conditionId","").lower() == condition_id.lower()), None)
-                if not m:
-                    return None
-            else:
-                m = data
-            prices_raw = m.get("outcomePrices", '["0.5","0.5"]')
-            if isinstance(prices_raw, str):
-                prices_raw = _json.loads(prices_raw)
-            end = (m.get("endDate") or m.get("endDateIso", "")).rstrip("Z")
-            if not end:
-                return None
-            if "T" not in end:
-                end += "T23:59:59"
-            resolves_at = datetime.fromisoformat(end).replace(tzinfo=timezone.utc)
-            hours_left = (resolves_at - datetime.now(timezone.utc)).total_seconds() / 3600
-            if hours_left < 1:
-                return None
-            return Market(
-                condition_id     = m["conditionId"],
-                question         = m.get("question", ""),
-                yes_price        = float(prices_raw[0]),
-                no_price         = float(prices_raw[1]),
-                volume_usdc      = float(m.get("volume24hr") or m.get("volume") or 0),
-                liquidity_usdc   = float(m.get("liquidity", 0)),
-                spread           = float(m.get("spread", 1)),
-                resolves_at      = resolves_at,
-                hours_to_resolve = hours_left,
-            )
-        except Exception as e:
-            log.warning(f"[WHALE/FETCH] erro {condition_id[:12]}: {e}")
-            return None
 
     while True:
         if not is_started_whale() or is_paused_whale():
@@ -425,11 +384,11 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     return_exceptions=True,
                 )
 
-            # Agrega: (condition_id, side) → set de wallets
+            # Agrega: (condition_id, side) → melhor pos da Data API
             from collections import defaultdict
             wallet_map: dict[tuple, set] = defaultdict(set)
+            pos_data: dict[tuple, dict] = {}  # guarda dados da posição para usar depois
 
-            from datetime import date, timedelta
             cutoff = date.today() + timedelta(days=2)
 
             for addr, res in zip(WHALE_COPY_WALLETS, results):
@@ -444,104 +403,123 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         continue
                     if not (0.02 < cur_price < 0.98):
                         continue
-                    # Filtra posições com endDate muito distante (históricas)
                     try:
                         end_date = date.fromisoformat(end_date_str[:10])
                         if end_date > cutoff:
                             continue
                     except Exception:
-                        pass
+                        continue
                     wallet_map[(cid, side)].add(addr)
+                    pos_data[(cid, side)] = pos
 
             log.info(f"[WHALE] {len(wallet_map)} posições candidatas ({sum(1 for v in wallet_map.values() if len(v)>=2)} com 2+ wallets)")
 
-            # Fetch info de mercado e filtra por hours_to_resolve > 72h
-            async with httpx.AsyncClient() as client:
-                market_cache: dict[tuple, Market] = {}
-                for (cid, side_str) in list(wallet_map.keys()):
-                    # Já aberto ou lado oposto
-                    if portfolio.already_open(cid):
-                        continue
-                    if _has_opposite_side(portfolio, cid, Side.YES if side_str == "YES" else Side.NO):
-                        continue
-                    if scorer_portfolio and scorer_portfolio.already_open(cid):
-                        continue
-                    m = await fetch_market_info(client, cid)
-                    if m:
-                        market_cache[(cid, side_str)] = m
+            # Filtra já abertas e lado oposto
+            candidates = {}
+            for (cid, side_str), wallets in wallet_map.items():
+                if portfolio.already_open(cid):
+                    continue
+                if _has_opposite_side(portfolio, cid, Side.YES if side_str == "YES" else Side.NO):
+                    continue
+                if scorer_portfolio and scorer_portfolio.already_open(cid):
+                    continue
+                candidates[(cid, side_str)] = wallets
 
-                log.info(f"[WHALE] {len(market_cache)} mercados válidos para executar")
+            log.info(f"[WHALE] {len(candidates)} candidatos após dedup")
 
-                # Ordena: mais wallets primeiro, depois resolve mais cedo
-                sorted_positions = sorted(
-                    [(k, wallet_map[k]) for k in market_cache],
-                    key=lambda x: (-len(x[1]), market_cache[x[0]].hours_to_resolve)
+            # Ordena: mais wallets primeiro, depois endDate ascendente
+            sorted_candidates = sorted(
+                candidates.items(),
+                key=lambda x: (-len(x[1]), pos_data[x[0]].get("endDate", "9999"))
+            )
+
+            new_trades = 0
+            bought_cids: set[str] = set()
+
+            for (cid, side_str), wallets in sorted_candidates:
+                if not portfolio.can_trade():
+                    log.info("[WHALE] can_trade=False — stop")
+                    break
+
+                # Blacklist
+                title = pos_data[(cid, side_str)].get("title", "")
+                if any(b.lower() in title.lower() for b in WHALE_QUESTION_BLACKLIST):
+                    continue
+
+                # Dedup — não comprar YES e NO do mesmo mercado
+                if cid in bought_cids:
+                    continue
+
+                p         = pos_data[(cid, side_str)]
+                cur_price = float(p.get("curPrice") or 0)
+                end_str   = p.get("endDate", "")
+                n         = len(wallets)
+
+                # Constrói Market a partir dos dados da Data API
+                try:
+                    end_str_clean = end_str.rstrip("Z")
+                    if "T" not in end_str_clean:
+                        end_str_clean += "T23:59:59"
+                    resolves_at = datetime.fromisoformat(end_str_clean).replace(tzinfo=timezone.utc)
+                    hours_left  = (resolves_at - datetime.now(timezone.utc)).total_seconds() / 3600
+                except Exception:
+                    continue
+
+                side = Side.YES if side_str == "YES" else Side.NO
+                yes_price = cur_price if side == Side.YES else round(1 - cur_price, 4)
+                no_price  = cur_price if side == Side.NO  else round(1 - cur_price, 4)
+
+                market = Market(
+                    condition_id     = cid,
+                    question         = title,
+                    yes_price        = yes_price,
+                    no_price         = no_price,
+                    volume_usdc      = float(p.get("initialValue") or 0),
+                    liquidity_usdc   = 0.0,
+                    spread           = 0.02,
+                    resolves_at      = resolves_at,
+                    hours_to_resolve = hours_left,
                 )
 
-                new_trades = 0
-                bought_cids: set[str] = set()
+                price = cur_price
+                if n >= 4:
+                    size_usdc = FULL_SIZE_USDC
+                elif n >= 2:
+                    size_usdc = HALF_SIZE_USDC
+                else:
+                    size_usdc = HALF_SIZE_USDC / 2
 
-                log.info(f"[WHALE] a processar {len(sorted_positions)} posições, can_trade={portfolio.can_trade()}")
-                for (cid, side_str), wallets_with_pos in sorted_positions:
-                    if not portfolio.can_trade():
-                        log.info("[WHALE] can_trade=False — stop")
-                        break
+                sig = AgentSignal(
+                    agent           = AgentName.WHALE_COPY,
+                    market          = market,
+                    side            = side,
+                    confidence      = min(1.0, n / 4),
+                    reason          = f"{n} wallet(s) {side_str} @ {price:.2f}",
+                    suggested_price = price + 0.01,
+                )
+                decision = TradeDecision(
+                    market            = market,
+                    side              = side,
+                    consensus_count   = n,
+                    size_usdc         = size_usdc,
+                    entry_price       = price + 0.01,
+                    target_exit_price = round(price + 0.01 + 0.90 * (1.0 - (price + 0.01)), 4),
+                    signals           = [sig],
+                )
 
-                    market = market_cache[(cid, side_str)]
-                    bl = any(b.lower() in market.question.lower() for b in WHALE_QUESTION_BLACKLIST)
-                    dup = cid in bought_cids
-                    log.info(f"[WHALE/ITER] {cid[:10]} {side_str} bl={bl} dup={dup} q={market.question[:30]}")
-
-                    # Blacklist
-                    if bl:
-                        continue
-
-                    # Dedup — não comprar YES e NO do mesmo mercado no mesmo ciclo
-                    if dup:
-                        continue
-
-                    side  = Side.YES if side_str == "YES" else Side.NO
-                    price = market.yes_price if side == Side.YES else market.no_price
-                    n     = len(wallets_with_pos)
-
-                    if n >= 4:
-                        size_usdc = FULL_SIZE_USDC
-                    elif n >= 2:
-                        size_usdc = HALF_SIZE_USDC
-                    else:
-                        size_usdc = HALF_SIZE_USDC / 2
-
-                    sig = AgentSignal(
-                        agent           = AgentName.WHALE_COPY,
-                        market          = market,
-                        side            = side,
-                        confidence      = min(1.0, n / 4),
-                        reason          = f"{n} wallet(s) {side_str} @ {price:.2f}",
-                        suggested_price = price + 0.01,
-                    )
-                    decision = TradeDecision(
-                        market            = market,
-                        side              = side,
-                        consensus_count   = n,
-                        size_usdc         = size_usdc,
-                        entry_price       = price + 0.01,
-                        target_exit_price = round(price + 0.01 + 0.90 * (1.0 - (price + 0.01)), 4),
-                        signals           = [sig],
-                    )
-
-                    log.info(f"[WHALE] {side_str} {market.question[:45]} @ {price:.2f} [{n}w]")
-                    try:
-                        pos = executor.execute(decision)
-                    except Exception as ex:
-                        log.error(f"[WHALE/EXEC-ERR] {ex}")
-                        pos = None
-                    if pos:
-                        portfolio.add_position(pos)
-                        bought_cids.add(cid)
-                        new_trades += 1
-                        log.info(f"[WHALE/OK] {side_str} {market.question[:45]} @ {price:.2f} {market.hours_to_resolve:.0f}h")
-                    else:
-                        log.warning(f"[WHALE/FAIL] {side_str} {market.question[:45]}")
+                log.info(f"[WHALE] {side_str} {title[:45]} @ {price:.2f} [{n}w] {hours_left:.0f}h")
+                try:
+                    pos = executor.execute(decision)
+                except Exception as ex:
+                    log.error(f"[WHALE/EXEC-ERR] {ex}")
+                    pos = None
+                if pos:
+                    portfolio.add_position(pos)
+                    bought_cids.add(cid)
+                    new_trades += 1
+                    log.info(f"[WHALE/OK] {side_str} {title[:45]} @ {price:.2f}")
+                else:
+                    log.warning(f"[WHALE/FAIL] {side_str} {title[:45]}")
 
             if new_trades:
                 log.info(f"[WHALE] {new_trades} novas posições abertas")
