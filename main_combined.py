@@ -365,7 +365,12 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             r = await client.get(f"{GAMMA_API}/markets", params={"conditionIds": condition_id}, timeout=10)
             r.raise_for_status()
             data = r.json()
-            m = data[0] if isinstance(data, list) and data else data
+            if isinstance(data, list):
+                m = next((x for x in data if x.get("conditionId","").lower() == condition_id.lower()), None)
+                if not m:
+                    return None
+            else:
+                m = data
             prices_raw = m.get("outcomePrices", '["0.5","0.5"]')
             if isinstance(prices_raw, str):
                 prices_raw = _json.loads(prices_raw)
