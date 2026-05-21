@@ -80,7 +80,7 @@ class Executor:
                 log.info(f"Ordem executada: {trade_id} orderID={order.get('orderID','')[:16]}...")
                 return self._build_position(trade_id, decision, price, token_id)
             else:
-                log.warning(f"Ordem nao executada: {order}")
+                log.warning(f"[EXECUTOR] Ordem nao executada: {order}")
                 return None
 
         except Exception as e:
@@ -88,7 +88,7 @@ class Executor:
             if "not enough balance" in err_str or "balance is not enough" in err_str:
                 log.warning(f"Sem saldo disponível — a pausar execução até próxima venda")
                 self.no_balance = True
-            log.error(f"Erro na execucao de {trade_id}: {e}")
+            log.error(f"[EXECUTOR] Erro {trade_id}: {type(e).__name__}: {e}")
             return None
 
     def cancel_order(self, order_id: str) -> bool:
