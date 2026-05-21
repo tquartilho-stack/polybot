@@ -338,7 +338,9 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
         try:
             all_positions = []
             offset = 0
-            while True:
+            max_pages = 5
+            page = 0
+            while page < max_pages:
                 r = await client.get(
                     f"{POLY_DATA_API}/positions",
                     params={"user": address, "sizeThreshold": "0.01", "limit": 100, "offset": offset},
@@ -352,6 +354,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                 if len(d) < 100:
                     break
                 offset += 100
+                page += 1
             return all_positions
         except Exception as e:
             log.warning(f"[WHALE] Erro fetch {address[:10]}: {e}")
@@ -373,7 +376,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                 end += "T23:59:59"
             resolves_at = datetime.fromisoformat(end).replace(tzinfo=timezone.utc)
             hours_left = (resolves_at - datetime.now(timezone.utc)).total_seconds() / 3600
-            if hours_left < 72:
+            if hours_left < 1:
                 return None
             return Market(
                 condition_id     = m["conditionId"],
@@ -421,6 +424,9 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             from collections import defaultdict
             wallet_map: dict[tuple, set] = defaultdict(set)
 
+            from datetime import date, timedelta
+            cutoff = date.today() + timedelta(days=2)
+
             for addr, res in zip(WHALE_COPY_WALLETS, results):
                 if not isinstance(res, list):
                     continue
@@ -428,8 +434,19 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     cid       = pos.get("conditionId", "")
                     side      = pos.get("outcome", "").upper()
                     cur_price = float(pos.get("curPrice") or 0)
-                    if cid and side in ("YES", "NO") and 0.02 < cur_price < 0.98:
-                        wallet_map[(cid, side)].add(addr)
+                    end_date_str = pos.get("endDate", "")
+                    if not cid or side not in ("YES", "NO"):
+                        continue
+                    if not (0.02 < cur_price < 0.98):
+                        continue
+                    # Filtra posições com endDate muito distante (históricas)
+                    try:
+                        end_date = date.fromisoformat(end_date_str[:10])
+                        if end_date > cutoff:
+                            continue
+                    except Exception:
+                        pass
+                    wallet_map[(cid, side)].add(addr)
 
             log.info(f"[WHALE] {len(wallet_map)} posições candidatas ({sum(1 for v in wallet_map.values() if len(v)>=2)} com 2+ wallets)")
 
