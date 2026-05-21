@@ -182,42 +182,28 @@ async function fetchPositions(addr) {
   return all;
 }
 
-async function fetchActivity(addr) {
-  let all = [], offset = 0;
-  while (true) {
-    const url = `${PROXY}?_path=activity&user=${addr}&limit=500&offset=${offset}`;
-    try {
-      const r = await fetch(url);
-      if (!r.ok) break;
-      const d = await r.json();
-      const items = Array.isArray(d) ? d : (d.history || d.data || []);
-      if (!items.length) break;
-      all = all.concat(items);
-      if (items.length < 500) break;
-      offset += 500;
-    } catch(e) { break; }
-  }
-  return all;
-}
+// activity endpoint is 403 — history comes from resolved positions (curPrice 0 or 1)
 
 // ── Main load ─────────────────────────────────────────────────────────────────
 async function loadAll() {
   document.getElementById('open-tbody').innerHTML = '<tr><td colspan="9" class="loading">a carregar da Poly...</td></tr>';
   document.getElementById('history-tbody').innerHTML = '<tr><td colspan="9" class="loading">a carregar da Poly...</td></tr>';
 
-  const [allPositions, activity] = await Promise.all([
-    fetchPositions(PROXY_ADDR),
-    fetchActivity(PROXY_ADDR),
-  ]);
+  const allPositions = await fetchPositions(PROXY_ADDR);
 
   openPositions = allPositions.filter(p => {
     const cp = parseFloat(p.curPrice || 0);
     return cp > 0.02 && cp < 0.98;
   });
 
+  const closedPositions = allPositions.filter(p => {
+    const cp = parseFloat(p.curPrice || 0);
+    return cp <= 0.02 || cp >= 0.98;
+  });
+
   renderOpen(openPositions);
-  renderHistory(activity);
-  updateStats(openPositions, activity);
+  renderHistory(closedPositions);
+  updateStats(openPositions, closedPositions);
   document.getElementById('last-update').textContent = '· ' + new Date().toLocaleTimeString('pt-PT');
 }
 
@@ -271,61 +257,52 @@ function renderOpen(positions) {
   }).join('');
 }
 
-function renderHistory(activity) {
+function renderHistory(closed) {
   const tbody = document.getElementById('history-tbody');
-  // Filter only trades (type=TRADE or redeemed/settled)
-  const trades = activity.filter(a => {
-    const type = (a.type||a.action||'').toUpperCase();
-    return type === 'TRADE' || type === 'REDEEM' || type === 'SELL' || parseFloat(a.cashPnl||a.pnl||0) !== 0;
-  });
-  document.getElementById('history-count').textContent = trades.length;
-  if (!trades.length) {
+  document.getElementById('history-count').textContent = closed.length;
+  if (!closed.length) {
     tbody.innerHTML = '<tr><td colspan="9" class="empty">sem histórico</td></tr>';
     return;
   }
 
-  // Sort newest first
-  trades.sort((a,b) => new Date(b.timestamp||b.createdAt||0) - new Date(a.timestamp||a.createdAt||0));
+  // Sort by endDate desc
+  closed.sort((a,b) => new Date(b.endDate||0) - new Date(a.endDate||0));
 
-  tbody.innerHTML = trades.slice(0, 200).map(h => {
-    const outcome = (h.outcome||h.side||'').toUpperCase();
+  tbody.innerHTML = closed.slice(0, 300).map(h => {
+    const outcome = (h.outcome||'').toUpperCase();
     const sideTag = outcome === 'YES'
       ? '<span class="tag tag-yes">YES</span>'
-      : outcome === 'NO'
-      ? '<span class="tag tag-no">NO</span>'
-      : `<span style="color:var(--muted)">${outcome||'—'}</span>`;
+      : '<span class="tag tag-no">NO</span>';
 
-    const pnl = parseFloat(h.cashPnl || h.pnl_usdc || h.pnl || 0);
+    const pnl = parseFloat(h.cashPnl || 0);
     const pnlClass = pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : 'neu';
     const pnlStr = `<span class="${pnlClass}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span>`;
 
-    const ts = h.timestamp || h.createdAt || '';
-    const dateStr = ts ? new Date(ts).toLocaleDateString('pt-PT') : '—';
-    const title = (h.title || h.market || h.question || '').substring(0, 50);
-    const avgPrice = parseFloat(h.avgPrice || h.price || h.entry_price || 0);
-    const size = parseFloat(h.size || 0);
-    const invested = parseFloat(h.initialValue || h.size_usdc || (avgPrice * size) || 0);
-    const exitPrice = parseFloat(h.exitPrice || h.exit_price || 0);
+    const cp = parseFloat(h.curPrice || 0);
+    const exitPrice = cp >= 0.98 ? 1.0 : 0.0;
+    const avgPrice = parseFloat(h.avgPrice || 0);
+    const invested = parseFloat(h.initialValue || 0);
     const endDate = (h.endDate||'').substring(0,10);
+    const title = (h.title||'').substring(0, 50);
 
     return `<tr>
       <td title="${h.title||''}">${title||'—'}</td>
       <td><span style="color:var(--muted)">—</span></td>
       <td>${sideTag}</td>
-      <td style="color:var(--muted)">${dateStr}</td>
+      <td style="color:var(--muted)">—</td>
       <td>$${avgPrice.toFixed(3)}</td>
       <td>$${invested.toFixed(2)}</td>
-      <td>${exitPrice > 0 ? '$'+exitPrice.toFixed(3) : '—'}</td>
-      <td style="color:var(--muted)">${endDate||'—'}</td>
+      <td>$${exitPrice.toFixed(2)}</td>
+      <td style="color:var(--muted)">${endDate}</td>
       <td>${pnlStr}</td>
     </tr>`;
   }).join('');
 }
 
-function updateStats(open, activity) {
-  const history = activity.filter(a => parseFloat(a.cashPnl||a.pnl||0) !== 0);
-  const totalPnl = history.reduce((s, h) => s + parseFloat(h.cashPnl||h.pnl||0), 0);
-  const wins = history.filter(h => parseFloat(h.cashPnl||h.pnl||0) > 0).length;
+function updateStats(open, closed) {
+  const totalPnl = closed.reduce((s, h) => s + parseFloat(h.cashPnl||0), 0);
+  const wins = closed.filter(h => parseFloat(h.cashPnl||0) > 0).length;
+  const history = closed;
   const wr = history.length > 0 ? (wins / history.length * 100).toFixed(0) : '—';
   const invested = open.reduce((s, p) => s + parseFloat(p.initialValue||0), 0);
 
