@@ -9,60 +9,46 @@
   :root {
     --bg:#080a0d; --s1:#0e1117; --s2:#141820; --border:#1c2130;
     --text:#dde3ee; --muted:#4a5568; --dim:#2d3748;
-    --green:#00e676; --red:#ff5252; --yellow:#ffd740; --blue:#448aff; --purple:#e040fb;
+    --green:#00e676; --red:#ff5252; --yellow:#ffd740; --purple:#e040fb;
     --mono:'JetBrains Mono',monospace; --sans:'DM Sans',sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;min-height:100vh;}
-
   header{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;border-bottom:1px solid var(--border);}
   .logo{font-family:var(--mono);font-size:14px;letter-spacing:.1em;color:var(--muted);}
   .logo b{color:var(--green);}
   .agents{display:flex;gap:10px;}
   .agent-btn{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--s1);cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--muted);transition:all .2s;}
-  .agent-btn:hover{border-color:var(--dim);}
-  .agent-btn .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:background .3s;}
+  .agent-btn .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);}
   .agent-btn.on-scorer .dot{background:var(--green);box-shadow:0 0 6px var(--green);}
   .agent-btn.on-whale .dot{background:var(--purple);box-shadow:0 0 6px var(--purple);}
   .agent-btn.on-scorer{border-color:rgba(0,230,118,.2);color:var(--green);}
   .agent-btn.on-whale{border-color:rgba(224,64,251,.2);color:var(--purple);}
-  .agent-label{font-size:10px;}
-
   .top-bar{display:flex;align-items:center;gap:24px;padding:16px 28px;border-bottom:1px solid var(--border);}
   .pnl-block{display:flex;flex-direction:column;gap:2px;}
   .pnl-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
   .pnl-val{font-family:var(--mono);font-size:28px;font-weight:600;}
-  .pnl-val.pos{color:var(--green);}
-  .pnl-val.neg{color:var(--red);}
-  .pnl-val.neu{color:var(--text);}
+  .pnl-val.pos{color:var(--green);} .pnl-val.neg{color:var(--red);} .pnl-val.neu{color:var(--text);}
   .divider{width:1px;height:40px;background:var(--border);}
   .stat{display:flex;flex-direction:column;gap:3px;}
   .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
-  .stat-val{font-family:var(--mono);font-size:16px;color:var(--text);}
-
-  .section{padding:20px 28px 0;}
+  .stat-val{font-family:var(--mono);font-size:16px;}
+  .section{padding:20px 28px 24px;}
   .section-title{font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
   .section-title span{color:var(--text);font-family:var(--mono);}
-
-  .table-wrap{background:var(--s1);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:24px;}
+  .table-wrap{background:var(--s1);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
   table{width:100%;border-collapse:collapse;}
   th{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:9px 14px;text-align:left;border-bottom:1px solid var(--border);font-weight:500;background:var(--s2);}
   td{padding:10px 14px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px;vertical-align:middle;}
   tr:last-child td{border-bottom:none;}
   tr:hover td{background:rgba(255,255,255,.015);}
   .empty{padding:28px;text-align:center;color:var(--muted);font-size:12px;font-family:var(--mono);}
-
   .tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:3px;font-family:var(--mono);}
   .tag-yes{background:rgba(0,230,118,.12);color:var(--green);}
   .tag-no{background:rgba(255,82,82,.12);color:var(--red);}
-  .tag-scorer{background:rgba(0,230,118,.08);color:rgba(0,230,118,.7);}
-  .tag-whale{background:rgba(224,64,251,.08);color:rgba(224,64,251,.7);}
   .pos{color:var(--green);} .neg{color:var(--red);} .neu{color:var(--text);}
-
-  .loading{padding:28px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:11px;}
   .refresh-btn{font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;margin-left:auto;}
-  .refresh-btn:hover{color:var(--text);}
-  .last-update{font-family:var(--mono);font-size:10px;color:var(--dim);margin-left:8px;}
+  .last-update{font-family:var(--mono);font-size:10px;color:var(--dim);}
 </style>
 </head>
 <body>
@@ -71,66 +57,42 @@
   <div class="logo">poly<b>bot</b></div>
   <div class="agents">
     <button class="agent-btn" id="btn-scorer" onclick="toggleAgent('scorer')">
-      <div class="dot"></div>
-      <span class="agent-label">SCORER</span>
+      <div class="dot"></div><span>SCORER</span>
     </button>
     <button class="agent-btn" id="btn-whale" onclick="toggleAgent('whale')">
-      <div class="dot"></div>
-      <span class="agent-label">WHALE</span>
+      <div class="dot"></div><span>WHALE</span>
     </button>
   </div>
 </header>
 
 <div class="top-bar">
   <div class="pnl-block">
-    <div class="pnl-label">PNL Total</div>
+    <div class="pnl-label">PNL Total (fechadas)</div>
     <div class="pnl-val neu" id="pnl-total">—</div>
   </div>
   <div class="divider"></div>
   <div class="stat"><div class="stat-label">Abertas</div><div class="stat-val" id="stat-open">—</div></div>
   <div class="stat"><div class="stat-label">Fechadas</div><div class="stat-val" id="stat-closed">—</div></div>
   <div class="stat"><div class="stat-label">Win Rate</div><div class="stat-val" id="stat-wr">—</div></div>
-  <div class="stat"><div class="stat-label">Investido</div><div class="stat-val" id="stat-invested">—</div></div>
+  <div class="stat"><div class="stat-label">Investido Aberto</div><div class="stat-val" id="stat-invested">—</div></div>
   <button class="refresh-btn" onclick="loadAll()">↻ refresh</button>
   <span class="last-update" id="last-update"></span>
 </div>
 
 <div class="section">
-  <div class="section-title">Posições Abertas <span id="open-count">0</span></div>
+  <div class="section-title">Todas as Posições <span id="all-count">0</span></div>
   <div class="table-wrap">
     <table>
       <thead><tr>
         <th>Mercado</th>
-        <th>Agente</th>
         <th>Side</th>
-        <th>Data</th>
-        <th>Compra / Share</th>
+        <th>Compra/Share</th>
         <th>Investido</th>
         <th>Cur Price</th>
-        <th>P&L</th>
+        <th>Cash PNL</th>
         <th>End Date</th>
       </tr></thead>
-      <tbody id="open-tbody"><tr><td colspan="9" class="loading">a carregar...</td></tr></tbody>
-    </table>
-  </div>
-</div>
-
-<div class="section">
-  <div class="section-title">Histórico <span id="history-count">0</span></div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr>
-        <th>Mercado</th>
-        <th>Agente</th>
-        <th>Side</th>
-        <th>Data Compra</th>
-        <th>Compra / Share</th>
-        <th>Investido</th>
-        <th>Saída / Share</th>
-        <th>End Date</th>
-        <th>PNL</th>
-      </tr></thead>
-      <tbody id="history-tbody"><tr><td colspan="9" class="loading">a carregar...</td></tr></tbody>
+      <tbody id="all-tbody"><tr><td colspan="7" class="empty">a carregar...</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -139,17 +101,13 @@
 const PROXY = '/poly-proxy';
 const PROXY_ADDR = '0x0F4902690951B760C451A8f9dc81D72871359E18';
 
-let agentState = {scorer: false, whale: false};
-let openPositions = [];
-let historyTrades = [];
-
-// ── Agent buttons ─────────────────────────────────────────────────────────────
 async function toggleAgent(agent) {
-  const state = agentState[agent];
-  const ep = state
+  const btn = document.getElementById('btn-'+agent);
+  const isOn = btn.classList.contains('on-'+agent);
+  const ep = isOn
     ? (agent === 'scorer' ? '/stop' : '/stop-whale')
     : (agent === 'scorer' ? '/start' : '/start-whale');
-  await fetch(ep, {method: 'POST'});
+  await fetch(ep, {method:'POST'});
   await checkStatus();
 }
 
@@ -157,16 +115,13 @@ async function checkStatus() {
   try {
     const r = await fetch('/status');
     const d = await r.json();
-    agentState.scorer = d.started && !d.paused;
-    agentState.whale  = d.started_whale && !d.paused_whale;
     const bs = document.getElementById('btn-scorer');
     const bw = document.getElementById('btn-whale');
-    bs.className = 'agent-btn' + (agentState.scorer ? ' on-scorer' : '');
-    bw.className = 'agent-btn' + (agentState.whale  ? ' on-whale'  : '');
+    bs.className = 'agent-btn' + (d.started && !d.paused ? ' on-scorer' : '');
+    bw.className = 'agent-btn' + (d.started_whale && !d.paused_whale ? ' on-whale' : '');
   } catch(e) {}
 }
 
-// ── Poly API via proxy ────────────────────────────────────────────────────────
 async function fetchPositions(addr) {
   let all = [], offset = 0;
   while (true) {
@@ -174,7 +129,7 @@ async function fetchPositions(addr) {
     const r = await fetch(url);
     if (!r.ok) break;
     const d = await r.json();
-    if (!Array.isArray(d) || d.length === 0) break;
+    if (!Array.isArray(d) || !d.length) break;
     all = all.concat(d);
     if (d.length < 500) break;
     offset += 500;
@@ -182,141 +137,79 @@ async function fetchPositions(addr) {
   return all;
 }
 
-// activity endpoint is 403 — history comes from resolved positions (curPrice 0 or 1)
-
-// ── Main load ─────────────────────────────────────────────────────────────────
 async function loadAll() {
-  document.getElementById('open-tbody').innerHTML = '<tr><td colspan="9" class="loading">a carregar da Poly...</td></tr>';
-  document.getElementById('history-tbody').innerHTML = '<tr><td colspan="9" class="loading">a carregar da Poly...</td></tr>';
+  document.getElementById('all-tbody').innerHTML = '<tr><td colspan="7" class="empty">a carregar da Poly...</td></tr>';
 
-  const allPositions = await fetchPositions(PROXY_ADDR);
+  const all = await fetchPositions(PROXY_ADDR);
 
-  openPositions = allPositions.filter(p => {
-    const cp = parseFloat(p.curPrice || 0);
-    return cp > 0.02 && cp < 0.98;
+  // Sort: open (0.05-0.95) first by endDate asc, then closed by endDate desc
+  all.sort((a, b) => {
+    const acp = parseFloat(a.curPrice||0), bcp = parseFloat(b.curPrice||0);
+    const aOpen = acp > 0.05 && acp < 0.95;
+    const bOpen = bcp > 0.05 && bcp < 0.95;
+    if (aOpen !== bOpen) return aOpen ? -1 : 1;
+    if (aOpen) return new Date(a.endDate||'9999') - new Date(b.endDate||'9999');
+    return new Date(b.endDate||'0') - new Date(a.endDate||'0');
   });
 
-  const closedPositions = allPositions.filter(p => {
-    const cp = parseFloat(p.curPrice || 0);
-    return cp <= 0.02 || cp >= 0.98;
-  });
+  const open   = all.filter(p => { const cp = parseFloat(p.curPrice||0); return cp > 0.05 && cp < 0.95; });
+  const closed = all.filter(p => { const cp = parseFloat(p.curPrice||0); return cp <= 0.05 || cp >= 0.95; });
 
-  renderOpen(openPositions);
-  renderHistory(closedPositions);
-  updateStats(openPositions, closedPositions);
+  document.getElementById('all-count').textContent = all.length;
+  document.getElementById('stat-open').textContent = open.length;
+  document.getElementById('stat-closed').textContent = closed.length;
+
+  const totalPnl = closed.reduce((s, p) => s + parseFloat(p.cashPnl||0), 0);
+  const wins = closed.filter(p => parseFloat(p.cashPnl||0) > 0).length;
+  const wr = closed.length ? (wins/closed.length*100).toFixed(0)+'%' : '—';
+  const invested = open.reduce((s, p) => s + parseFloat(p.initialValue||0), 0);
+
+  const pel = document.getElementById('pnl-total');
+  pel.textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
+  pel.className = 'pnl-val ' + (totalPnl > 0 ? 'pos' : totalPnl < 0 ? 'neg' : 'neu');
+  document.getElementById('stat-wr').textContent = wr;
+  document.getElementById('stat-invested').textContent = '$'+invested.toFixed(2);
   document.getElementById('last-update').textContent = '· ' + new Date().toLocaleTimeString('pt-PT');
-}
 
-function renderOpen(positions) {
-  const tbody = document.getElementById('open-tbody');
-  document.getElementById('open-count').textContent = positions.length;
-  if (!positions.length) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty">sem posições abertas</td></tr>';
+  if (!all.length) {
+    document.getElementById('all-tbody').innerHTML = '<tr><td colspan="7" class="empty">sem posições</td></tr>';
     return;
   }
 
-  // Sort by endDate asc
-  positions.sort((a,b) => new Date(a.endDate||'9999') - new Date(b.endDate||'9999'));
-
-  tbody.innerHTML = positions.map(p => {
-    const cid      = p.conditionId || '';
-    const side     = (p.outcome||'').toUpperCase();
-    const cp       = parseFloat(p.curPrice || 0);
-    const avgPrice = parseFloat(p.avgPrice || 0);
-    const size     = parseFloat(p.size || 0);
-    const initVal  = parseFloat(p.initialValue || 0);
-    const curVal   = parseFloat(p.currentValue || cp * size);
-    const pnl      = curVal - initVal;
-    const pnlPct   = initVal > 0 ? ((pnl / initVal) * 100).toFixed(1) : '0';
-    const invested = initVal.toFixed(2);
-    const endDate  = (p.endDate||'').substring(0,10);
-    const entryDate = '—'; // Data API doesn't give entry date on positions endpoint
-
-    const agentTag = '<span style="color:var(--muted)">—</span>';
+  document.getElementById('all-tbody').innerHTML = all.map(p => {
+    const side    = (p.outcome||'').toUpperCase();
+    const cp      = parseFloat(p.curPrice||0);
+    const avg     = parseFloat(p.avgPrice||0);
+    const initVal = parseFloat(p.initialValue||0);
+    const cashPnl = parseFloat(p.cashPnl||0);
+    const endDate = (p.endDate||'').substring(0,10);
+    const title   = (p.title||'').substring(0,55);
+    const isOpen  = cp > 0.05 && cp < 0.95;
 
     const sideTag = side === 'YES'
       ? '<span class="tag tag-yes">YES</span>'
       : '<span class="tag tag-no">NO</span>';
 
-    const pnlClass = pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : 'neu';
-    const pnlStr   = `<span class="${pnlClass}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${pnlPct}%)</span>`;
+    const pnlStr = cashPnl !== 0
+      ? `<span class="${cashPnl>0?'pos':'neg'}">${cashPnl>=0?'+':''}$${cashPnl.toFixed(2)}</span>`
+      : '<span style="color:var(--muted)">—</span>';
 
-    const title = (p.title || p.question || cid.substring(0,12)).substring(0,50);
+    const cpStr = isOpen
+      ? `$${cp.toFixed(3)}`
+      : `<span class="${cp>=0.95?'pos':'neg'}">$${cp.toFixed(3)}</span>`;
 
-    return `<tr>
+    return `<tr style="${isOpen?'':'opacity:0.55;'}">
       <td title="${p.title||''}">${title}</td>
-      <td>${agentTag}</td>
       <td>${sideTag}</td>
-      <td style="color:var(--muted)">${entryDate}</td>
-      <td>$${avgPrice.toFixed(3)}</td>
-      <td>$${invested}</td>
-      <td>$${cp.toFixed(3)}</td>
+      <td>$${avg.toFixed(3)}</td>
+      <td>$${initVal.toFixed(2)}</td>
+      <td>${cpStr}</td>
       <td>${pnlStr}</td>
       <td style="color:var(--muted)">${endDate}</td>
     </tr>`;
   }).join('');
 }
 
-function renderHistory(closed) {
-  const tbody = document.getElementById('history-tbody');
-  document.getElementById('history-count').textContent = closed.length;
-  if (!closed.length) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty">sem histórico</td></tr>';
-    return;
-  }
-
-  // Sort by endDate desc
-  closed.sort((a,b) => new Date(b.endDate||0) - new Date(a.endDate||0));
-
-  tbody.innerHTML = closed.slice(0, 300).map(h => {
-    const outcome = (h.outcome||'').toUpperCase();
-    const sideTag = outcome === 'YES'
-      ? '<span class="tag tag-yes">YES</span>'
-      : '<span class="tag tag-no">NO</span>';
-
-    const pnl = parseFloat(h.cashPnl || 0);
-    const pnlClass = pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : 'neu';
-    const pnlStr = `<span class="${pnlClass}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span>`;
-
-    const cp = parseFloat(h.curPrice || 0);
-    const exitPrice = cp >= 0.98 ? 1.0 : 0.0;
-    const avgPrice = parseFloat(h.avgPrice || 0);
-    const invested = parseFloat(h.initialValue || 0);
-    const endDate = (h.endDate||'').substring(0,10);
-    const title = (h.title||'').substring(0, 50);
-
-    return `<tr>
-      <td title="${h.title||''}">${title||'—'}</td>
-      <td><span style="color:var(--muted)">—</span></td>
-      <td>${sideTag}</td>
-      <td style="color:var(--muted)">—</td>
-      <td>$${avgPrice.toFixed(3)}</td>
-      <td>$${invested.toFixed(2)}</td>
-      <td>$${exitPrice.toFixed(2)}</td>
-      <td style="color:var(--muted)">${endDate}</td>
-      <td>${pnlStr}</td>
-    </tr>`;
-  }).join('');
-}
-
-function updateStats(open, closed) {
-  const totalPnl = closed.reduce((s, h) => s + parseFloat(h.cashPnl||0), 0);
-  const wins = closed.filter(h => parseFloat(h.cashPnl||0) > 0).length;
-  const history = closed;
-  const wr = history.length > 0 ? (wins / history.length * 100).toFixed(0) : '—';
-  const invested = open.reduce((s, p) => s + parseFloat(p.initialValue||0), 0);
-
-  const pnlEl = document.getElementById('pnl-total');
-  pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
-  pnlEl.className = 'pnl-val ' + (totalPnl > 0 ? 'pos' : totalPnl < 0 ? 'neg' : 'neu');
-
-  document.getElementById('stat-open').textContent = open.length;
-  document.getElementById('stat-closed').textContent = history.length;
-  document.getElementById('stat-wr').textContent = wr === '—' ? '—' : wr + '%';
-  document.getElementById('stat-invested').textContent = '$' + invested.toFixed(2);
-}
-
-// ── Init ──────────────────────────────────────────────────────────────────────
 checkStatus();
 loadAll();
 setInterval(checkStatus, 10000);
