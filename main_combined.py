@@ -564,6 +564,14 @@ async def main():
         proxy_addr     = POLY_PROXY_ADDRESS,
         dry_run        = DRY_RUN,
     )
+    whale_executor = Executor(
+        private_key    = POLY_PRIVATE_KEY,
+        api_key        = POLY_API_KEY,
+        api_secret     = POLY_API_SECRET,
+        api_passphrase = POLY_API_PASSPHRASE,
+        proxy_addr     = POLY_PROXY_ADDRESS,
+        dry_run        = DRY_RUN,
+    )
 
     scorer_portfolio = Portfolio(max_open=MAX_OPEN_POSITIONS, max_daily=MAX_DAILY_TRADES,
                                   state_file=DATA_DIR / "portfolio_state.json")
@@ -571,11 +579,11 @@ async def main():
                                   state_file=DATA_DIR / "portfolio_state_whale.json")
 
     scorer_exit = ExitManager(executor)
-    whale_exit  = ExitManager(executor)
+    whale_exit  = ExitManager(whale_executor)
 
     await asyncio.gather(
         scorer_loop(executor, scorer_portfolio, scorer_exit, whale_portfolio),
-        whale_loop(executor, whale_portfolio, whale_exit, scorer_portfolio),
+        whale_loop(whale_executor, whale_portfolio, whale_exit, scorer_portfolio),
     )
 
 
