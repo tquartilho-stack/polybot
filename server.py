@@ -51,6 +51,26 @@ class Handler(BaseHTTPRequestHandler):
                 "paused_whale":  PAUSE_FILE_WHALE.exists(),
                 "started_whale": STARTED_FILE_WHALE.exists(),
             })
+        elif path.startswith("/poly-proxy"):
+            from urllib.parse import urlencode, parse_qs, urlparse as _up
+            import urllib.request as _ur
+            qs = urlparse(self.path).query
+            params = parse_qs(qs)
+            flat = {k: v[0] for k,v in params.items()}
+            poly_path = flat.pop("_path", "positions")
+            url = f"https://data-api.polymarket.com/{poly_path}?{urlencode(flat)}"
+            try:
+                req = _ur.Request(url, headers={"Accept":"application/json"})
+                with _ur.urlopen(req, timeout=15) as resp:
+                    data = resp.read()
+                self.send_response(200)
+                self.send_header("Content-Type","application/json")
+                self.send_header("Access-Control-Allow-Origin","*")
+                self.send_header("Content-Length", len(data))
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception as e:
+                self._json({"error": str(e)})
         else:
             self.send_response(404)
             self.end_headers()
