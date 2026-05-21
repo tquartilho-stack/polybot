@@ -459,6 +459,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                 new_trades = 0
                 bought_cids: set[str] = set()
 
+                log.info(f"[WHALE] a processar {len(sorted_positions)} posições, can_trade={portfolio.can_trade()}")
                 for (cid, side_str), wallets_with_pos in sorted_positions:
                     if not portfolio.can_trade():
                         log.info("[WHALE] can_trade=False — stop")
@@ -504,7 +505,11 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     )
 
                     log.info(f"[WHALE] {side_str} {market.question[:45]} @ {price:.2f} [{n}w]")
-                    pos = executor.execute(decision)
+                    try:
+                        pos = executor.execute(decision)
+                    except Exception as ex:
+                        log.error(f"[WHALE/EXEC-ERR] {ex}")
+                        pos = None
                     if pos:
                         portfolio.add_position(pos)
                         bought_cids.add(cid)
