@@ -311,10 +311,10 @@ async def scorer_loop(executor, portfolio, exit_manager, whale_portfolio=None):
 # ── WHALE LOOP (copy trader — 4 wallets fixas) ────────────────────────────────
 
 WHALE_COPY_WALLETS = [
-    "0x204f72f35326db932158cba6adff0b9a1da95e14",
-    "0x9495425feeb0c250accb89275c97587011b19a27",
-    "0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
     "0xa5ea13a81d2b7e8e424b182bdc1db08e756bd96a",
+    "0x9f2fe025f84839ca81dd8e0338892605702d2ca8",
+    "0x9495425feeb0c250accb89275c97587011b19a27",
+    "0x204f72f35326db932158cba6adff0b9a1da95e14",
 ]
 
 WHALE_QUESTION_BLACKLIST = ["rihanna"]
@@ -389,7 +389,8 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             wallet_map: dict[tuple, set] = defaultdict(set)
             pos_data: dict[tuple, dict] = {}  # guarda dados da posição para usar depois
 
-            cutoff = date.today() + timedelta(hours=24)
+            cutoff_max = date.today() + timedelta(days=2)
+            cutoff_min = date.today() - timedelta(days=1)
 
             for addr, res in zip(WHALE_COPY_WALLETS, results):
                 if not isinstance(res, list):
@@ -405,7 +406,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         continue
                     try:
                         end_date = date.fromisoformat(end_date_str[:10])
-                        if end_date > cutoff:
+                        if end_date < cutoff_min or end_date > cutoff_max:
                             continue
                     except Exception:
                         continue
@@ -435,6 +436,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
             new_trades = 0
             bought_cids: set[str] = set()
+            bought_titles: set[str] = set()
 
             for (cid, side_str), wallets in sorted_candidates:
                 if not portfolio.can_trade():
@@ -446,8 +448,11 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                 if any(b.lower() in title.lower() for b in WHALE_QUESTION_BLACKLIST):
                     continue
 
-                # Dedup — não comprar YES e NO do mesmo mercado
+                # Dedup por cid e por evento (primeiros 30 chars do title)
                 if cid in bought_cids:
+                    continue
+                event_key = title[:30].lower().strip()
+                if event_key in bought_titles:
                     continue
 
                 p         = pos_data[(cid, side_str)]
@@ -518,6 +523,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                 if pos:
                     portfolio.add_position(pos)
                     bought_cids.add(cid)
+                    bought_titles.add(event_key)
                     new_trades += 1
                     log.info(f"[WHALE/OK] {side_str} {title[:45]} @ {price:.2f}")
                 else:
