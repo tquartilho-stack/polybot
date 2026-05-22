@@ -364,7 +364,6 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             await asyncio.sleep(10)
             continue
 
-        executor.no_balance = False
         _whale_cycle += 1
         console.rule(f"[bold purple]Whale · Ciclo {datetime.now(timezone.utc).strftime('%H:%M UTC')}")
 
