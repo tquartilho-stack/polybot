@@ -381,7 +381,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                 )
 
             cutoff_min = date.today() - timedelta(days=1)
-            cutoff_max = date.today()
+            cutoff_max = date.today() + timedelta(days=2)
 
             wallet_map: dict[tuple, set] = defaultdict(set)
             pos_data: dict[tuple, dict] = {}
