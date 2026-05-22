@@ -405,7 +405,8 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     except Exception:
                         continue
                     wallet_map[(cid, side)].add(addr)
-                    pos_data[(cid, side)] = pos
+                    if (cid, side) not in pos_data:
+                        pos_data[(cid, side)] = pos
 
             log.info(f"[WHALE] {len(wallet_map)} candidatas ({sum(1 for v in wallet_map.values() if len(v)>=2)} com 2+ wallets)")
 
@@ -413,11 +414,14 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             from reconcile import fetch_real_positions
             real_positions = await fetch_real_positions(POLY_PROXY_ADDRESS)
             real_open_cids = {p.get("conditionId","") for p in real_positions}
-            real_open_keys = {f"{p.get('conditionId','')}_{p.get('outcome','').upper()}" for p in real_positions}
-            # Para cada cid aberto, guarda os sides já abertos
             real_sides: dict[str, set] = defaultdict(set)
+            real_event_slugs: set[str] = set()
             for p in real_positions:
                 real_sides[p.get("conditionId","")].add(p.get("outcome","").upper())
+                slug = p.get("slug","")
+                if slug:
+                    parts = slug.rsplit("-", 1)
+                    real_event_slugs.add(parts[0] if len(parts) > 1 else slug)
 
             # Filtra já abertas e lado oposto
             candidates = {}
@@ -427,6 +431,14 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     continue
                 if cid in real_open_cids and side_str in real_sides.get(cid, set()):
                     continue
+                # Evento já aberto (mesmo jogo, mercado diferente)
+                p_check = pos_data.get((cid, side_str), {})
+                slug_check = p_check.get("slug","")
+                if slug_check:
+                    parts = slug_check.rsplit("-", 1)
+                    ev = parts[0] if len(parts) > 1 else slug_check
+                    if ev in real_event_slugs:
+                        continue
                 # Lado oposto no portfolio local ou na Poly real
                 side_enum = Side.YES if side_str == "YES" else Side.NO
                 if _has_opposite_side(portfolio, cid, side_enum):
@@ -461,7 +473,14 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     continue
                 if cid in bought_cids:
                     continue
-                event_key = title[:30].lower().strip()
+                # Event key from slug — remove last segment (market type)
+                # e.g. "lal-bar-rea-2026-05-10-bar" → "lal-bar-rea-2026-05-10"
+                slug = p.get("slug", "")
+                if slug:
+                    parts = slug.rsplit("-", 1)
+                    event_key = parts[0] if len(parts) > 1 else slug
+                else:
+                    event_key = title[:30].lower().strip()
                 if event_key in bought_titles:
                     continue
 
