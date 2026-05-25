@@ -417,10 +417,9 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             real_event_slugs: set[str] = set()
             for p in real_positions:
                 real_sides[p.get("conditionId","")].add(p.get("outcome","").upper())
-                slug = p.get("slug","")
-                if slug:
-                    parts = slug.rsplit("-", 1)
-                    real_event_slugs.add(parts[0] if len(parts) > 1 else slug)
+                ev = p.get("eventSlug","") or p.get("slug","").rsplit("-",1)[0]
+                if ev:
+                    real_event_slugs.add(ev)
 
             # Filtra já abertas e lado oposto
             candidates = {}
@@ -432,12 +431,9 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     continue
                 # Evento já aberto (mesmo jogo, mercado diferente)
                 p_check = pos_data.get((cid, side_str), {})
-                slug_check = p_check.get("slug","")
-                if slug_check:
-                    parts = slug_check.rsplit("-", 1)
-                    ev = parts[0] if len(parts) > 1 else slug_check
-                    if ev in real_event_slugs:
-                        continue
+                ev_check = p_check.get("eventSlug","") or p_check.get("slug","").rsplit("-",1)[0]
+                if ev_check and ev_check in real_event_slugs:
+                    continue
                 # Lado oposto no portfolio local ou na Poly real
                 side_enum = Side.YES if side_str == "YES" else Side.NO
                 if _has_opposite_side(portfolio, cid, side_enum):
@@ -474,12 +470,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     continue
                 # Event key from slug — remove last segment (market type)
                 # e.g. "lal-bar-rea-2026-05-10-bar" → "lal-bar-rea-2026-05-10"
-                slug = p.get("slug", "")
-                if slug:
-                    parts = slug.rsplit("-", 1)
-                    event_key = parts[0] if len(parts) > 1 else slug
-                else:
-                    event_key = title[:30].lower().strip()
+                event_key = p.get("eventSlug","") or p.get("slug","").rsplit("-",1)[0] or title[:30].lower()
                 if event_key in bought_titles:
                     continue
 
