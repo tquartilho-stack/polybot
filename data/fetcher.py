@@ -14,16 +14,28 @@ from data.models import Market
 
 
 async def fetch_active_markets(client: httpx.AsyncClient) -> list[dict]:
-    params = {
-        "active":    "true",
-        "closed":    "false",
-        "limit":     MAX_MARKETS_TO_SCORE,
-        "order":     "volume24hr",
-        "ascending": "false",
-    }
-    r = await client.get(f"{GAMMA_API}/markets", params=params, timeout=20)
-    r.raise_for_status()
-    return r.json()
+    all_markets = []
+    offset = 0
+    page_size = 100  # Gamma API max per request
+    while len(all_markets) < MAX_MARKETS_TO_SCORE:
+        params = {
+            "active":    "true",
+            "closed":    "false",
+            "limit":     page_size,
+            "offset":    offset,
+            "order":     "volume24hr",
+            "ascending": "false",
+        }
+        r = await client.get(f"{GAMMA_API}/markets", params=params, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+        if not data:
+            break
+        all_markets.extend(data)
+        if len(data) < page_size:
+            break
+        offset += page_size
+    return all_markets[:MAX_MARKETS_TO_SCORE]
 
 
 async def fetch_market_by_id(client: httpx.AsyncClient, condition_id: str):
