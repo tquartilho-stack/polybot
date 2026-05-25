@@ -23,7 +23,7 @@ client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 HAIKU_MODEL    = "claude-haiku-4-5-20251001"
 BATCH_SIZE     = 50   # mercados por chamada ao Haiku (pre-filtro)
 SONNET_BATCH   = 20   # mercados por chamada ao Sonnet (scoring fino)
-HAIKU_THRESHOLD = 3.0  # score mínimo para passar ao Sonnet
+HAIKU_THRESHOLD = 5.0  # score mínimo para passar ao Sonnet
 
 
 # ── System prompts ────────────────────────────────────────────────────────────
