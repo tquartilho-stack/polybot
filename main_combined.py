@@ -308,262 +308,187 @@ async def scorer_loop(executor, portfolio, exit_manager, whale_portfolio=None):
         await asyncio.sleep(RUN_INTERVAL_MINS * 60)
 
 
-# ── WHALE LOOP (copy trader — 4 wallets fixas) ────────────────────────────────
+# ── WHALE LOOP v3 — live copy trader (1 wallet, 10s polling) ─────────────────
 
-WHALE_COPY_WALLETS = [
-    "0xa5ea13a81d2b7e8e424b182bdc1db08e756bd96a",
-    "0x9f2fe025f84839ca81dd8e0338892605702d2ca8",
-    "0x9495425feeb0c250accb89275c97587011b19a27",
-    "0x204f72f35326db932158cba6adff0b9a1da95e14",
-]
-
-WHALE_QUESTION_BLACKLIST = ["rihanna"]
+WHALE_COPY_WALLET = "0xa5ea13a81d2b7e8e424b182bdc1db08e756bd96a"
+WHALE_POLL_SECS   = 10
+WHALE_BET_USDC    = 5.0   # tamanho fixo por bet
 
 async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
     global _whale_cycle, _exit_task_whale
 
     import httpx
-    from datetime import date, timedelta
-    from collections import defaultdict
     from data.models import Side, Market, AgentSignal, AgentName
     from consensus import TradeDecision
 
     POLY_DATA_API = "https://data-api.polymarket.com"
-    _first_run = True
+
+    log.info(f"[WHALE] Live copy trader iniciado — wallet {WHALE_COPY_WALLET[:10]}... poll={WHALE_POLL_SECS}s")
 
     if portfolio.positions:
-        log.info(f"[WHALE] {len(portfolio.positions)} posições carregadas — exit manager a iniciar...")
+        log.info(f"[WHALE] {len(portfolio.positions)} posições carregadas")
         _exit_task_whale = asyncio.create_task(_exit_background(portfolio, exit_manager, "WHALE"))
 
-    async def fetch_wallet_positions(client, address):
+    # Estado: trades já vistos (set de transactionHash)
+    seen_hashes: set[str] = set()
+    # Também guarda eventSlugs já copiados para evitar duplicar evento
+    copied_event_slugs: set[str] = set()
+
+    # Seed inicial — marca todos os trades existentes como já vistos (não copia histórico)
+    async with httpx.AsyncClient() as client:
         try:
-            all_positions = []
-            offset = 0
-            while True:
-                r = await client.get(
-                    f"{POLY_DATA_API}/positions",
-                    params={"user": address, "sizeThreshold": "0.01", "limit": 100, "offset": offset},
-                    timeout=15,
-                )
-                r.raise_for_status()
-                d = r.json()
-                if not isinstance(d, list) or not d:
-                    break
-                all_positions.extend(d)
-                if len(d) < 100:
-                    break
-                offset += 100
-            return all_positions
+            r = await client.get(
+                f"{POLY_DATA_API}/trades",
+                params={"user": WHALE_COPY_WALLET, "limit": 500},
+                timeout=15,
+            )
+            r.raise_for_status()
+            initial = r.json() if isinstance(r.json(), list) else []
+            for t in initial:
+                seen_hashes.add(t.get("transactionHash", ""))
+            log.info(f"[WHALE] Seed: {len(seen_hashes)} trades históricos marcados")
         except Exception as e:
-            log.warning(f"[WHALE] Erro fetch {address[:10]}: {e}")
-            return []
+            log.warning(f"[WHALE] Erro seed: {e}")
 
     while True:
         if not is_started_whale() or is_paused_whale():
-            _first_run = True
+            seen_hashes.clear()
+            copied_event_slugs.clear()
             await asyncio.sleep(10)
             continue
 
-        _whale_cycle += 1
-        console.rule(f"[bold purple]Whale · Ciclo {datetime.now(timezone.utc).strftime('%H:%M UTC')}")
+        await asyncio.sleep(WHALE_POLL_SECS)
 
         try:
-            if len(portfolio.positions) >= portfolio.max_open:
-                log.info("[WHALE] Máximo de posições atingido.")
-                await asyncio.sleep(RUN_INTERVAL_MINS * 60)
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    f"{POLY_DATA_API}/trades",
+                    params={"user": WHALE_COPY_WALLET, "limit": 50},
+                    timeout=10,
+                )
+                r.raise_for_status()
+                trades = r.json() if isinstance(r.json(), list) else []
+
+            # Detecta novos BUYs
+            new_buys = [
+                t for t in trades
+                if t.get("transactionHash","") not in seen_hashes
+                and t.get("side","").upper() == "BUY"
+            ]
+
+            # Marca todos como vistos
+            for t in trades:
+                seen_hashes.add(t.get("transactionHash",""))
+
+            if not new_buys:
                 continue
 
+            _whale_cycle += 1
+            log.info(f"[WHALE] {len(new_buys)} novo(s) BUY(s) detectado(s)")
+
             async with httpx.AsyncClient() as client:
-                results = await asyncio.gather(
-                    *[fetch_wallet_positions(client, addr) for addr in WHALE_COPY_WALLETS],
-                    return_exceptions=True,
-                )
+                for t in new_buys:
+                    cid        = t.get("conditionId","")
+                    outcome    = t.get("outcome","").upper()
+                    price      = float(t.get("price", 0))
+                    title      = t.get("title","")
+                    event_slug = t.get("eventSlug","")
 
-            cutoff_min = date.today() - timedelta(days=1)
-            cutoff_max = date.today() + timedelta(days=2)
-
-            wallet_map: dict[tuple, set] = defaultdict(set)
-            pos_data: dict[tuple, dict] = {}
-
-            for addr, res in zip(WHALE_COPY_WALLETS, results):
-                if not isinstance(res, list):
-                    continue
-                for pos in res:
-                    cid       = pos.get("conditionId", "")
-                    side      = pos.get("outcome", "").upper()
-                    cur_price = float(pos.get("curPrice") or 0)
-                    end_str   = pos.get("endDate", "")
-                    if not cid or side not in ("YES", "NO"):
+                    if not cid or outcome not in ("YES","NO") or price <= 0:
                         continue
-                    if not (0.02 < cur_price < 0.98):
+
+                    # Filtros
+                    if price < 0.02 or price > 0.98:
+                        log.info(f"[WHALE] SKIP price={price:.2f}: {title[:40]}")
                         continue
+                    if portfolio.already_open(cid):
+                        log.info(f"[WHALE] SKIP already_open: {title[:40]}")
+                        continue
+                    if event_slug and event_slug in copied_event_slugs:
+                        log.info(f"[WHALE] SKIP event já copiado: {title[:40]}")
+                        continue
+                    if not portfolio.can_trade():
+                        log.info("[WHALE] can_trade=False — stop")
+                        break
+
+                    side = Side.YES if outcome == "YES" else Side.NO
+
+                    # Busca endDate via posições da wallet
+                    end_str = t.get("endDate","")
                     try:
-                        end_date = date.fromisoformat(end_str[:10])
-                        if end_date < cutoff_min or end_date > cutoff_max:
+                        from datetime import timedelta
+                        if end_str:
+                            end_clean = end_str.rstrip("Z")
+                            if "T" not in end_clean:
+                                end_clean += "T23:59:59"
+                            resolves_at = datetime.fromisoformat(end_clean).replace(tzinfo=timezone.utc)
+                        else:
+                            resolves_at = datetime.now(timezone.utc) + timedelta(hours=24)
+                        hours_left = (resolves_at - datetime.now(timezone.utc)).total_seconds() / 3600
+                        if hours_left <= 0:
+                            log.info(f"[WHALE] SKIP expirado: {title[:40]}")
                             continue
                     except Exception:
-                        continue
-                    wallet_map[(cid, side)].add(addr)
-                    if (cid, side) not in pos_data:
-                        pos_data[(cid, side)] = pos
+                        resolves_at = datetime.now(timezone.utc) + timedelta(hours=24)
+                        hours_left  = 24
 
-            log.info(f"[WHALE] {len(wallet_map)} candidatas ({sum(1 for v in wallet_map.values() if len(v)>=2)} com 2+ wallets)")
+                    yes_price = price if side == Side.YES else round(1 - price, 4)
+                    no_price  = price if side == Side.NO  else round(1 - price, 4)
 
-            # Fetch posições reais do proxy para dedup fiável
-            from reconcile import fetch_real_positions
-            real_positions = await fetch_real_positions(POLY_PROXY_ADDRESS)
-            real_open_cids = {p.get("conditionId","") for p in real_positions}
-            real_sides: dict[str, set] = defaultdict(set)
-            real_event_slugs: set[str] = set()
-            for p in real_positions:
-                real_sides[p.get("conditionId","")].add(p.get("outcome","").upper())
-                ev = p.get("eventSlug","") or p.get("slug","").rsplit("-",1)[0]
-                if ev:
-                    real_event_slugs.add(ev)
+                    market = Market(
+                        condition_id     = cid,
+                        question         = title,
+                        yes_price        = yes_price,
+                        no_price         = no_price,
+                        volume_usdc      = 0.0,
+                        liquidity_usdc   = 0.0,
+                        spread           = 0.02,
+                        resolves_at      = resolves_at,
+                        hours_to_resolve = hours_left,
+                    )
 
-            # Filtra já abertas e lado oposto
-            candidates = {}
-            for (cid, side_str), wallets in wallet_map.items():
-                # Já aberto no portfolio local ou na Poly real
-                if portfolio.already_open(cid):
-                    continue
-                if cid in real_open_cids and side_str in real_sides.get(cid, set()):
-                    continue
-                # Evento já aberto (mesmo jogo, mercado diferente)
-                p_check = pos_data.get((cid, side_str), {})
-                ev_check = p_check.get("eventSlug","") or p_check.get("slug","").rsplit("-",1)[0]
-                if ev_check and ev_check in real_event_slugs:
-                    continue
-                # Lado oposto no portfolio local ou na Poly real
-                side_enum = Side.YES if side_str == "YES" else Side.NO
-                if _has_opposite_side(portfolio, cid, side_enum):
-                    continue
-                opposite = "NO" if side_str == "YES" else "YES"
-                if opposite in real_sides.get(cid, set()):
-                    continue
-                if scorer_portfolio and scorer_portfolio.already_open(cid):
-                    continue
-                candidates[(cid, side_str)] = wallets
+                    sig = AgentSignal(
+                        agent           = AgentName.WHALE_COPY,
+                        market          = market,
+                        side            = side,
+                        confidence      = 1.0,
+                        reason          = f"live copy @ {price:.2f}",
+                        suggested_price = price + 0.01,
+                    )
+                    decision = TradeDecision(
+                        market            = market,
+                        side              = side,
+                        consensus_count   = 1,
+                        size_usdc         = WHALE_BET_USDC,
+                        entry_price       = price + 0.01,
+                        target_exit_price = round(price + 0.01 + 0.90 * (1.0 - (price + 0.01)), 4),
+                        signals           = [sig],
+                    )
 
-            log.info(f"[WHALE] {len(candidates)} após dedup")
+                    log.info(f"[WHALE] COPY {outcome} {title[:45]} @ {price:.2f} {hours_left:.0f}h")
+                    try:
+                        pos = executor.execute(decision)
+                    except Exception as ex:
+                        log.error(f"[WHALE/ERR] {ex}")
+                        pos = None
 
-            sorted_candidates = sorted(
-                candidates.items(),
-                key=lambda x: (-len(x[1]), pos_data[x[0]].get("endDate", "9999"))
-            )
-
-            new_trades = 0
-            bought_cids: set[str] = set()
-            bought_titles: set[str] = set()
-
-            for (cid, side_str), wallets in sorted_candidates:
-                if not portfolio.can_trade():
-                    log.info("[WHALE] can_trade=False — stop")
-                    break
-
-                p     = pos_data[(cid, side_str)]
-                title = p.get("title", "")
-
-                if any(b.lower() in title.lower() for b in WHALE_QUESTION_BLACKLIST):
-                    continue
-                if cid in bought_cids:
-                    continue
-                # Event key from slug — remove last segment (market type)
-                # e.g. "lal-bar-rea-2026-05-10-bar" → "lal-bar-rea-2026-05-10"
-                event_key = p.get("eventSlug","") or p.get("slug","").rsplit("-",1)[0] or title[:30].lower()
-                if event_key in bought_titles:
-                    continue
-
-                cur_price = float(p.get("curPrice") or 0)
-                end_str   = p.get("endDate", "")
-                n         = len(wallets)
-
-                try:
-                    end_clean = end_str.rstrip("Z")
-                    if "T" not in end_clean:
-                        end_clean += "T23:59:59"
-                    resolves_at = datetime.fromisoformat(end_clean).replace(tzinfo=timezone.utc)
-                    hours_left  = (resolves_at - datetime.now(timezone.utc)).total_seconds() / 3600
-                    if hours_left <= 0:
-                        continue
-                except Exception:
-                    continue
-
-                side      = Side.YES if side_str == "YES" else Side.NO
-                yes_price = cur_price if side == Side.YES else round(1 - cur_price, 4)
-                no_price  = cur_price if side == Side.NO  else round(1 - cur_price, 4)
-
-                market = Market(
-                    condition_id     = cid,
-                    question         = title,
-                    yes_price        = yes_price,
-                    no_price         = no_price,
-                    volume_usdc      = float(p.get("initialValue") or 0),
-                    liquidity_usdc   = 0.0,
-                    spread           = 0.02,
-                    resolves_at      = resolves_at,
-                    hours_to_resolve = hours_left,
-                )
-
-                if n >= 4:
-                    size_usdc = FULL_SIZE_USDC
-                elif n >= 2:
-                    size_usdc = HALF_SIZE_USDC
-                else:
-                    size_usdc = HALF_SIZE_USDC / 2
-
-                sig = AgentSignal(
-                    agent           = AgentName.WHALE_COPY,
-                    market          = market,
-                    side            = side,
-                    confidence      = min(1.0, n / 4),
-                    reason          = f"{n} wallet(s) {side_str} @ {cur_price:.2f}",
-                    suggested_price = cur_price + 0.01,
-                )
-                decision = TradeDecision(
-                    market            = market,
-                    side              = side,
-                    consensus_count   = n,
-                    size_usdc         = size_usdc,
-                    entry_price       = cur_price + 0.01,
-                    target_exit_price = round(cur_price + 0.01 + 0.90 * (1.0 - (cur_price + 0.01)), 4),
-                    signals           = [sig],
-                )
-
-                log.info(f"[WHALE] {side_str} {title[:45]} @ {cur_price:.2f} [{n}w] {hours_left:.0f}h")
-                try:
-                    pos = executor.execute(decision)
-                except Exception as ex:
-                    log.error(f"[WHALE/EXEC-ERR] {ex}")
-                    pos = None
-
-                if pos:
-                    portfolio.add_position(pos)
-                    bought_cids.add(cid)
-                    bought_titles.add(event_key)
-                    new_trades += 1
-                    log.info(f"[WHALE/OK] {side_str} {title[:45]} @ {cur_price:.2f}")
-                else:
-                    log.warning(f"[WHALE/FAIL] {side_str} {title[:45]}")
-
-            if new_trades:
-                log.info(f"[WHALE] {new_trades} novas posições abertas")
+                    if pos:
+                        portfolio.add_position(pos)
+                        if event_slug:
+                            copied_event_slugs.add(event_slug)
+                        log.info(f"[WHALE/OK] {outcome} {title[:45]} @ {price:.2f}")
+                    else:
+                        log.warning(f"[WHALE/FAIL] {outcome} {title[:45]}")
 
             if portfolio.positions:
                 if not _exit_task_whale or _exit_task_whale.done():
                     _exit_task_whale = asyncio.create_task(_exit_background(portfolio, exit_manager, "WHALE"))
 
-            console.print(f"[bold purple]{portfolio.summary()}")
-            _write_dashboard(DATA_DIR / "dashboard_data_whale.json", _whale_cycle, len(wallet_map), new_trades, {"whale_copy": new_trades}, 0, [], portfolio, list(_log_buffer_whale))
+            _write_dashboard(DATA_DIR / "dashboard_data_whale.json", _whale_cycle, 1, 0, {"whale_copy": 0}, 0, [], portfolio, list(_log_buffer_whale))
             await reconcile_portfolio(portfolio, POLY_PROXY_ADDRESS, "WHALE")
 
         except Exception as e:
             log.error(f"[WHALE] Erro: {e}", exc_info=True)
-
-        if _first_run:
-            _first_run = False
-        else:
-            await asyncio.sleep(RUN_INTERVAL_MINS * 60)
 
 
 # ── Utils ─────────────────────────────────────────────────────────────────────
