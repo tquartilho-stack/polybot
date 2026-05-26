@@ -395,6 +395,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     except Exception as _ce:
                         log.info(f"[WHALE] CLOB err {cid[:10]}: {_ce}")
 
+                    log.info(f"[WHALE] PRE-COPY: {outcome} {title[:40]} @ {price:.2f}")
                     if not portfolio.can_trade():
                         log.info("[WHALE] can_trade=False — stop")
                         break
