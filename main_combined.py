@@ -357,6 +357,15 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
             _whale_cycle += 1
 
+            # Fetch posições reais uma vez para todo o ciclo
+            from reconcile import fetch_real_positions
+            from datetime import timedelta, date as _date
+            _real = await fetch_real_positions(POLY_PROXY_ADDRESS)
+            _real_cids = {p.get("conditionId","") for p in _real}
+            _real_ev   = {p.get("eventSlug","") for p in _real if p.get("eventSlug","")}
+            _et_today  = (datetime.now(timezone.utc) - timedelta(hours=4)).date()
+            TITLE_BLACKLIST = ["world cup", "fifa", "roland garros", "wimbledon", "us open", "french open"]
+
             async with httpx.AsyncClient() as client:
                 for t in buys:
                     cid        = t.get("conditionId","")
@@ -367,20 +376,26 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
                     if not cid or outcome not in ("YES","NO") or price <= 0:
                         continue
-
-                    # Filtros
                     if price < 0.02 or price > 0.98:
                         log.info(f"[WHALE] SKIP price={price:.2f}: {title[:40]}")
                         continue
-
-                    # Blacklist de eventos longos por keyword no título
-                    TITLE_BLACKLIST = ["world cup", "fifa", "roland garros", "wimbledon", "us open", "french open"]
                     if any(b in title.lower() for b in TITLE_BLACKLIST):
                         log.info(f"[WHALE] SKIP blacklist: {title[:40]}")
                         continue
+                    if cid in _real_cids:
+                        log.info(f"[WHALE] SKIP já na Poly: {title[:40]}")
+                        continue
+                    if event_slug and event_slug in _real_ev:
+                        log.info(f"[WHALE] SKIP evento já na Poly: {title[:40]}")
+                        continue
+                    if event_slug and event_slug in copied_event_slugs:
+                        log.info(f"[WHALE] SKIP event já copiado: {title[:40]}")
+                        continue
+                    if portfolio.already_open(cid):
+                        log.info(f"[WHALE] SKIP already_open: {title[:40]}")
+                        continue
 
                     # Verifica endDate via CLOB — só eventos de hoje ET
-                    from datetime import timedelta, date as _date
                     try:
                         _clob_r = await client.get(
                             f"https://clob.polymarket.com/markets/{cid}",
@@ -390,30 +405,12 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                             _clob = _clob_r.json()
                             _end_raw = _clob.get("end_date_iso") or _clob.get("endDateIso","")
                             if _end_raw:
-                                _et_today = (datetime.now(timezone.utc) - timedelta(hours=4)).date()
                                 _end_date = _date.fromisoformat(_end_raw[:10])
                                 if _end_date > _et_today:
                                     log.info(f"[WHALE] SKIP endDate {_end_raw[:10]}: {title[:40]}")
                                     continue
                     except Exception:
                         pass
-                    if portfolio.already_open(cid):
-                        log.info(f"[WHALE] SKIP already_open: {title[:40]}")
-                        continue
-                    if event_slug and event_slug in copied_event_slugs:
-                        log.info(f"[WHALE] SKIP event já copiado: {title[:40]}")
-                        continue
-                    # Verifica posições reais na Poly
-                    from reconcile import fetch_real_positions
-                    _real = await fetch_real_positions(POLY_PROXY_ADDRESS)
-                    _real_cids = {p.get("conditionId","") for p in _real}
-                    _real_ev   = {p.get("eventSlug","") for p in _real if p.get("eventSlug","")}
-                    if cid in _real_cids:
-                        log.info(f"[WHALE] SKIP já na Poly: {title[:40]}")
-                        continue
-                    if event_slug and event_slug in _real_ev:
-                        log.info(f"[WHALE] SKIP evento já na Poly: {title[:40]}")
-                        continue
                     if not portfolio.can_trade():
                         log.info("[WHALE] can_trade=False — stop")
                         break
