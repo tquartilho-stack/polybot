@@ -310,7 +310,7 @@ async def scorer_loop(executor, portfolio, exit_manager, whale_portfolio=None):
 
 # ── WHALE LOOP v3 — live copy trader (1 wallet, 10s polling) ─────────────────
 
-WHALE_COPY_WALLET = "0xa5ea13a81d2b7e8e424b182bdc1db08e756bd96a"
+WHALE_COPY_WALLET = "0x204f72f35326db932158cba6adff0b9a1da95e14"
 WHALE_POLL_SECS   = 10
 WHALE_BET_USDC    = 5.0   # tamanho fixo por bet
 
