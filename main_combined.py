@@ -358,10 +358,8 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             _whale_cycle += 1
 
             from reconcile import fetch_real_positions
-            from datetime import timedelta, date as _date
             _real = await fetch_real_positions(POLY_PROXY_ADDRESS)
-            _real_cids = {p.get("conditionId","") for p in _real}
-            _et_today  = (datetime.now(timezone.utc) - timedelta(hours=4)).date()
+            _real_slugs = {p.get("eventSlug","") for p in _real if p.get("eventSlug","") and float(p.get("curPrice",0)) > 0.02}
 
             async with httpx.AsyncClient() as client:
                 for t in buys:
@@ -373,27 +371,31 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     if not cid or outcome not in ("YES","NO") or price <= 0:
                         continue
 
-                    # Filtro 1: já tens na Poly?
-                    if cid in _real_cids:
-                        log.info(f"[WHALE] SKIP já na Poly: {title[:40]}")
+                    # Filtro 1: World Cup
+                    if "world cup" in title.lower() or "fifa" in title.lower():
+                        log.info(f"[WHALE] SKIP world cup: {title[:40]}")
                         continue
 
-                    # Filtro 2: é de hoje ET? (via CLOB)
+                    # Filtro 2: endDate > 7 dias (via CLOB)
                     try:
-                        _clob_r = await client.get(
-                            f"https://clob.polymarket.com/markets/{cid}",
-                            timeout=5,
-                        )
+                        from datetime import timedelta, date as _date
+                        _clob_r = await client.get(f"https://clob.polymarket.com/markets/{cid}", timeout=5)
                         if _clob_r.is_success:
-                            _clob = _clob_r.json()
-                            _end_raw = _clob.get("end_date_iso") or _clob.get("endDateIso","")
+                            _end_raw = _clob_r.json().get("end_date_iso","")
                             if _end_raw:
                                 _end_date = _date.fromisoformat(_end_raw[:10])
-                                if _end_date > _et_today:
-                                    log.info(f"[WHALE] SKIP endDate {_end_raw[:10]}: {title[:40]}")
+                                _cutoff = (datetime.now(timezone.utc) + timedelta(days=7)).date()
+                                if _end_date > _cutoff:
+                                    log.info(f"[WHALE] SKIP >7d {_end_raw[:10]}: {title[:40]}")
                                     continue
                     except Exception as _ce:
                         log.info(f"[WHALE] CLOB err {cid[:10]}: {_ce}")
+
+                    # Filtro 3: já tens na Poly? (por eventSlug)
+                    event_slug = t.get("eventSlug","")
+                    if event_slug and event_slug in _real_slugs:
+                        log.info(f"[WHALE] SKIP já na Poly: {title[:40]}")
+                        continue
 
                     log.info(f"[WHALE] PRE-COPY: {outcome} {title[:40]} @ {price:.2f}")
                     if not portfolio.can_trade():
