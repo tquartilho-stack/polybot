@@ -364,12 +364,14 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             async with httpx.AsyncClient() as client:
                 for t in buys:
                     cid       = t.get("conditionId","")
-                    outcome   = t.get("outcome","").upper()
+                    outcome   = t.get("outcome","")
                     price     = float(t.get("price", 0))
                     title     = t.get("title","")
-                    log.info(f"[WHALE] checking: {title[:40]} {outcome} {price}")
+                    # outcome no /trades é o nome do jogador/side — normaliza
+                    outcome_idx = t.get("outcomeIndex", -1)
+                    side_str = "YES" if outcome_idx == 0 else "NO" if outcome_idx == 1 else ""
 
-                    if not cid or outcome not in ("YES","NO") or price <= 0:
+                    if not cid or not side_str or price <= 0:
                         continue
 
                     # Filtro 1: price 0.05-0.95
@@ -408,12 +410,12 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         log.info(f"[WHALE] SKIP dedup: {title[:40]}")
                         continue
 
-                    log.info(f"[WHALE] PRE-COPY: {outcome} {title[:40]} @ {price:.2f}")
+                    log.info(f"[WHALE] PRE-COPY: {side_str} {title[:40]} ({outcome[:20]}) @ {price:.2f}")
                     if not portfolio.can_trade():
                         log.info("[WHALE] can_trade=False — stop")
                         break
 
-                    side = Side.YES if outcome == "YES" else Side.NO
+                    side = Side.YES if side_str == "YES" else Side.NO
 
                     # Busca endDate via posições da wallet
                     end_str = t.get("endDate","")
@@ -454,7 +456,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         market          = market,
                         side            = side,
                         confidence      = 1.0,
-                        reason          = f"live copy @ {price:.2f}",
+                        reason          = f"live copy {outcome[:20]} @ {price:.2f}",
                         suggested_price = price + 0.01,
                     )
                     decision = TradeDecision(
@@ -479,9 +481,9 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         if event_slug:
                             copied_event_slugs.add(event_slug)
                             _real_slugs.add(event_slug)
-                        log.info(f"[WHALE/OK] {outcome} {title[:45]} @ {price:.2f}")
+                        log.info(f"[WHALE/OK] {side_str} {title[:45]} ({outcome[:15]}) @ {price:.2f}")
                     else:
-                        log.warning(f"[WHALE/FAIL] {outcome} {title[:45]}")
+                        log.warning(f"[WHALE/FAIL] {side_str} {title[:45]}")
 
             if portfolio.positions:
                 if not _exit_task_whale or _exit_task_whale.done():
