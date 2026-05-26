@@ -329,30 +329,10 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
         log.info(f"[WHALE] {len(portfolio.positions)} posições carregadas")
         _exit_task_whale = asyncio.create_task(_exit_background(portfolio, exit_manager, "WHALE"))
 
-    # Estado: trades já vistos (set de transactionHash)
+    # seen_hashes: evita processar o mesmo trade duas vezes na mesma sessão
     seen_hashes: set[str] = set()
-    # Também guarda eventSlugs já copiados para evitar duplicar evento
     copied_event_slugs: set[str] = set()
-
-    # Seed inicial — marca os últimos 1000 trades como vistos
-    async with httpx.AsyncClient() as client:
-        try:
-            for offset in (0, 500):
-                r = await client.get(
-                    f"{POLY_DATA_API}/trades",
-                    params={"user": WHALE_COPY_WALLET, "limit": 500, "offset": offset},
-                    timeout=15,
-                )
-                if not r.is_success:
-                    break
-                batch = r.json() if isinstance(r.json(), list) else []
-                for t in batch:
-                    seen_hashes.add(t.get("transactionHash", ""))
-                if len(batch) < 500:
-                    break
-            log.info(f"[WHALE] Seed: {len(seen_hashes)} trades marcados")
-        except Exception as e:
-            log.warning(f"[WHALE] Erro seed: {e}")
+    log.info(f"[WHALE] Sem seed — copia tudo que não esteja já aberto na Poly")
 
     while True:
         if not is_started_whale() or is_paused_whale():
