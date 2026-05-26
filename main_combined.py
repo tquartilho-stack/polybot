@@ -329,28 +329,8 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
         log.info(f"[WHALE] {len(portfolio.positions)} posições carregadas")
         _exit_task_whale = asyncio.create_task(_exit_background(portfolio, exit_manager, "WHALE"))
 
-    seen_hashes: set[str] = set()
     copied_event_slugs: set[str] = set()
-
-    # Seed — marca histórico recente como visto, só copia trades novos daqui em diante
-    async with httpx.AsyncClient() as client:
-        try:
-            for offset in (0, 500):
-                r = await client.get(
-                    f"{POLY_DATA_API}/trades",
-                    params={"user": WHALE_COPY_WALLET, "limit": 500, "offset": offset},
-                    timeout=15,
-                )
-                if not r.is_success:
-                    break
-                batch = r.json() if isinstance(r.json(), list) else []
-                for t in batch:
-                    seen_hashes.add(t.get("transactionHash", ""))
-                if len(batch) < 500:
-                    break
-            log.info(f"[WHALE] Seed: {len(seen_hashes)} trades marcados — só copia novos")
-        except Exception as e:
-            log.warning(f"[WHALE] Erro seed: {e}")
+    log.info(f"[WHALE] Live copy — verifica hoje ET + não aberto na Poly")
 
     while True:
         if not is_started_whale() or is_paused_whale():
@@ -371,25 +351,14 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                 r.raise_for_status()
                 trades = r.json() if isinstance(r.json(), list) else []
 
-            # Detecta novos BUYs
-            new_buys = [
-                t for t in trades
-                if t.get("transactionHash","") not in seen_hashes
-                and t.get("side","").upper() == "BUY"
-            ]
-
-            # Marca todos como vistos
-            for t in trades:
-                seen_hashes.add(t.get("transactionHash",""))
-
-            if not new_buys:
+            buys = [t for t in trades if t.get("side","").upper() == "BUY"]
+            if not buys:
                 continue
 
             _whale_cycle += 1
-            log.info(f"[WHALE] {len(new_buys)} novo(s) BUY(s) detectado(s)")
 
             async with httpx.AsyncClient() as client:
-                for t in new_buys:
+                for t in buys:
                     cid        = t.get("conditionId","")
                     outcome    = t.get("outcome","").upper()
                     price      = float(t.get("price", 0))
