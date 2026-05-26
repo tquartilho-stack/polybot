@@ -329,10 +329,28 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
         log.info(f"[WHALE] {len(portfolio.positions)} posições carregadas")
         _exit_task_whale = asyncio.create_task(_exit_background(portfolio, exit_manager, "WHALE"))
 
-    # seen_hashes: evita processar o mesmo trade duas vezes na mesma sessão
     seen_hashes: set[str] = set()
     copied_event_slugs: set[str] = set()
-    log.info(f"[WHALE] Sem seed — copia tudo que não esteja já aberto na Poly")
+
+    # Seed — marca histórico recente como visto, só copia trades novos daqui em diante
+    async with httpx.AsyncClient() as client:
+        try:
+            for offset in (0, 500):
+                r = await client.get(
+                    f"{POLY_DATA_API}/trades",
+                    params={"user": WHALE_COPY_WALLET, "limit": 500, "offset": offset},
+                    timeout=15,
+                )
+                if not r.is_success:
+                    break
+                batch = r.json() if isinstance(r.json(), list) else []
+                for t in batch:
+                    seen_hashes.add(t.get("transactionHash", ""))
+                if len(batch) < 500:
+                    break
+            log.info(f"[WHALE] Seed: {len(seen_hashes)} trades marcados — só copia novos")
+        except Exception as e:
+            log.warning(f"[WHALE] Erro seed: {e}")
 
     while True:
         if not is_started_whale() or is_paused_whale():
@@ -386,19 +404,30 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         log.info(f"[WHALE] SKIP price={price:.2f}: {title[:40]}")
                         continue
 
-                    # Filtro endDate: só eventos de hoje ou amanhã em ET (UTC-4)
+                    # Blacklist de eventos longos por keyword no título
+                    TITLE_BLACKLIST = ["world cup", "fifa", "roland garros", "wimbledon", "us open", "french open"]
+                    if any(b in title.lower() for b in TITLE_BLACKLIST):
+                        log.info(f"[WHALE] SKIP blacklist: {title[:40]}")
+                        continue
+
+                    # Verifica endDate via CLOB — só eventos de hoje ET
                     from datetime import timedelta, date as _date
-                    _et_now = datetime.now(timezone.utc) - timedelta(hours=4)
-                    _et_today = _et_now.date()
-                    _end_raw = t.get("endDate","")
-                    if _end_raw:
-                        try:
-                            _end_date = _date.fromisoformat(_end_raw[:10])
-                            if _end_date > _et_today:
-                                log.info(f"[WHALE] SKIP endDate {_end_raw[:10]}: {title[:40]}")
-                                continue
-                        except Exception:
-                            pass
+                    try:
+                        _clob_r = await client.get(
+                            f"https://clob.polymarket.com/markets/{cid}",
+                            timeout=5,
+                        )
+                        if _clob_r.is_success:
+                            _clob = _clob_r.json()
+                            _end_raw = _clob.get("end_date_iso") or _clob.get("endDateIso","")
+                            if _end_raw:
+                                _et_today = (datetime.now(timezone.utc) - timedelta(hours=4)).date()
+                                _end_date = _date.fromisoformat(_end_raw[:10])
+                                if _end_date > _et_today:
+                                    log.info(f"[WHALE] SKIP endDate {_end_raw[:10]}: {title[:40]}")
+                                    continue
+                    except Exception:
+                        pass
                     if portfolio.already_open(cid):
                         log.info(f"[WHALE] SKIP already_open: {title[:40]}")
                         continue
