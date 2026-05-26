@@ -367,16 +367,22 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     outcome   = t.get("outcome","").upper()
                     price     = float(t.get("price", 0))
                     title     = t.get("title","")
+                    log.info(f"[WHALE] checking: {title[:40]} {outcome} {price}")
 
                     if not cid or outcome not in ("YES","NO") or price <= 0:
                         continue
 
-                    # Filtro 1: World Cup
+                    # Filtro 1: price 0.05-0.95
+                    if price < 0.05 or price > 0.95:
+                        log.info(f"[WHALE] SKIP price={price:.2f}: {title[:40]}")
+                        continue
+
+                    # Filtro 2: World Cup
                     if "world cup" in title.lower() or "fifa" in title.lower():
                         log.info(f"[WHALE] SKIP world cup: {title[:40]}")
                         continue
 
-                    # Filtro 2: endDate > 7 dias (via CLOB)
+                    # Filtro 3: endDate > 7 dias (via CLOB)
                     try:
                         from datetime import timedelta, date as _date
                         _clob_r = await client.get(f"https://clob.polymarket.com/markets/{cid}", timeout=5)
@@ -391,10 +397,15 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     except Exception as _ce:
                         log.info(f"[WHALE] CLOB err {cid[:10]}: {_ce}")
 
-                    # Filtro 3: já tens na Poly? (por eventSlug)
+                    # Filtro 4: já tens na Poly? (por eventSlug)
                     event_slug = t.get("eventSlug","")
                     if event_slug and event_slug in _real_slugs:
                         log.info(f"[WHALE] SKIP já na Poly: {title[:40]}")
+                        continue
+
+                    # Filtro 5: dedup por eventSlug neste ciclo
+                    if event_slug and event_slug in copied_event_slugs:
+                        log.info(f"[WHALE] SKIP dedup: {title[:40]}")
                         continue
 
                     log.info(f"[WHALE] PRE-COPY: {outcome} {title[:40]} @ {price:.2f}")
@@ -467,6 +478,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         portfolio.add_position(pos)
                         if event_slug:
                             copied_event_slugs.add(event_slug)
+                            _real_slugs.add(event_slug)
                         log.info(f"[WHALE/OK] {outcome} {title[:45]} @ {price:.2f}")
                     else:
                         log.warning(f"[WHALE/FAIL] {outcome} {title[:45]}")
