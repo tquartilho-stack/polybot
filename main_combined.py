@@ -357,45 +357,28 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
             _whale_cycle += 1
 
-            # Fetch posições reais uma vez para todo o ciclo
             from reconcile import fetch_real_positions
             from datetime import timedelta, date as _date
             _real = await fetch_real_positions(POLY_PROXY_ADDRESS)
             _real_cids = {p.get("conditionId","") for p in _real}
-            _real_ev   = {p.get("eventSlug","") for p in _real if p.get("eventSlug","")}
             _et_today  = (datetime.now(timezone.utc) - timedelta(hours=4)).date()
-            TITLE_BLACKLIST = ["world cup", "fifa", "roland garros", "wimbledon", "us open", "french open"]
 
             async with httpx.AsyncClient() as client:
                 for t in buys:
-                    cid        = t.get("conditionId","")
-                    outcome    = t.get("outcome","").upper()
-                    price      = float(t.get("price", 0))
-                    title      = t.get("title","")
-                    event_slug = t.get("eventSlug","")
+                    cid       = t.get("conditionId","")
+                    outcome   = t.get("outcome","").upper()
+                    price     = float(t.get("price", 0))
+                    title     = t.get("title","")
 
                     if not cid or outcome not in ("YES","NO") or price <= 0:
                         continue
-                    if price < 0.02 or price > 0.98:
-                        log.info(f"[WHALE] SKIP price={price:.2f}: {title[:40]}")
-                        continue
-                    if any(b in title.lower() for b in TITLE_BLACKLIST):
-                        log.info(f"[WHALE] SKIP blacklist: {title[:40]}")
-                        continue
+
+                    # Filtro 1: já tens na Poly?
                     if cid in _real_cids:
                         log.info(f"[WHALE] SKIP já na Poly: {title[:40]}")
                         continue
-                    if event_slug and event_slug in _real_ev:
-                        log.info(f"[WHALE] SKIP evento já na Poly: {title[:40]}")
-                        continue
-                    if event_slug and event_slug in copied_event_slugs:
-                        log.info(f"[WHALE] SKIP event já copiado: {title[:40]}")
-                        continue
-                    if portfolio.already_open(cid):
-                        log.info(f"[WHALE] SKIP already_open: {title[:40]}")
-                        continue
 
-                    # Verifica endDate via CLOB — só eventos de hoje ET
+                    # Filtro 2: é de hoje ET? (via CLOB)
                     try:
                         _clob_r = await client.get(
                             f"https://clob.polymarket.com/markets/{cid}",
@@ -411,6 +394,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                                     continue
                     except Exception as _ce:
                         log.info(f"[WHALE] CLOB err {cid[:10]}: {_ce}")
+
                     if not portfolio.can_trade():
                         log.info("[WHALE] can_trade=False — stop")
                         break
