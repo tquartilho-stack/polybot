@@ -334,18 +334,25 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
     # Também guarda eventSlugs já copiados para evitar duplicar evento
     copied_event_slugs: set[str] = set()
 
-    # Seed inicial — marca todos os trades existentes como já vistos (não copia histórico)
+    # Seed inicial — pagina até apanhar todos os trades recentes
     async with httpx.AsyncClient() as client:
         try:
-            r = await client.get(
-                f"{POLY_DATA_API}/trades",
-                params={"user": WHALE_COPY_WALLET, "limit": 500},
-                timeout=15,
-            )
-            r.raise_for_status()
-            initial = r.json() if isinstance(r.json(), list) else []
-            for t in initial:
-                seen_hashes.add(t.get("transactionHash", ""))
+            offset = 0
+            while True:
+                r = await client.get(
+                    f"{POLY_DATA_API}/trades",
+                    params={"user": WHALE_COPY_WALLET, "limit": 500, "offset": offset},
+                    timeout=15,
+                )
+                r.raise_for_status()
+                batch = r.json() if isinstance(r.json(), list) else []
+                if not batch:
+                    break
+                for t in batch:
+                    seen_hashes.add(t.get("transactionHash", ""))
+                if len(batch) < 500:
+                    break
+                offset += 500
             log.info(f"[WHALE] Seed: {len(seen_hashes)} trades históricos marcados")
         except Exception as e:
             log.warning(f"[WHALE] Erro seed: {e}")
@@ -406,6 +413,17 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         continue
                     if event_slug and event_slug in copied_event_slugs:
                         log.info(f"[WHALE] SKIP event já copiado: {title[:40]}")
+                        continue
+                    # Verifica posições reais na Poly
+                    from reconcile import fetch_real_positions
+                    _real = await fetch_real_positions(POLY_PROXY_ADDRESS)
+                    _real_cids = {p.get("conditionId","") for p in _real}
+                    _real_ev   = {p.get("eventSlug","") for p in _real if p.get("eventSlug","")}
+                    if cid in _real_cids:
+                        log.info(f"[WHALE] SKIP já na Poly: {title[:40]}")
+                        continue
+                    if event_slug and event_slug in _real_ev:
+                        log.info(f"[WHALE] SKIP evento já na Poly: {title[:40]}")
                         continue
                     if not portfolio.can_trade():
                         log.info("[WHALE] can_trade=False — stop")
