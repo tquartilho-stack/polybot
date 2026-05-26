@@ -409,8 +409,8 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                                 if _end_date > _et_today:
                                     log.info(f"[WHALE] SKIP endDate {_end_raw[:10]}: {title[:40]}")
                                     continue
-                    except Exception:
-                        pass
+                    except Exception as _ce:
+                        log.info(f"[WHALE] CLOB err {cid[:10]}: {_ce}")
                     if not portfolio.can_trade():
                         log.info("[WHALE] can_trade=False — stop")
                         break
