@@ -385,6 +385,20 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                     if price < 0.02 or price > 0.98:
                         log.info(f"[WHALE] SKIP price={price:.2f}: {title[:40]}")
                         continue
+
+                    # Filtro endDate: só eventos de hoje ou amanhã em ET (UTC-4)
+                    from datetime import timedelta, date as _date
+                    _et_now = datetime.now(timezone.utc) - timedelta(hours=4)
+                    _et_today = _et_now.date()
+                    _end_raw = t.get("endDate","")
+                    if _end_raw:
+                        try:
+                            _end_date = _date.fromisoformat(_end_raw[:10])
+                            if _end_date > _et_today:
+                                log.info(f"[WHALE] SKIP endDate {_end_raw[:10]}: {title[:40]}")
+                                continue
+                        except Exception:
+                            pass
                     if portfolio.already_open(cid):
                         log.info(f"[WHALE] SKIP already_open: {title[:40]}")
                         continue
