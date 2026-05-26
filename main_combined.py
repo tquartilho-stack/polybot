@@ -334,26 +334,23 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
     # Também guarda eventSlugs já copiados para evitar duplicar evento
     copied_event_slugs: set[str] = set()
 
-    # Seed inicial — pagina até apanhar todos os trades recentes
+    # Seed inicial — marca os últimos 1000 trades como vistos
     async with httpx.AsyncClient() as client:
         try:
-            offset = 0
-            while True:
+            for offset in (0, 500):
                 r = await client.get(
                     f"{POLY_DATA_API}/trades",
                     params={"user": WHALE_COPY_WALLET, "limit": 500, "offset": offset},
                     timeout=15,
                 )
-                r.raise_for_status()
-                batch = r.json() if isinstance(r.json(), list) else []
-                if not batch:
+                if not r.is_success:
                     break
+                batch = r.json() if isinstance(r.json(), list) else []
                 for t in batch:
                     seen_hashes.add(t.get("transactionHash", ""))
                 if len(batch) < 500:
                     break
-                offset += 500
-            log.info(f"[WHALE] Seed: {len(seen_hashes)} trades históricos marcados")
+            log.info(f"[WHALE] Seed: {len(seen_hashes)} trades marcados")
         except Exception as e:
             log.warning(f"[WHALE] Erro seed: {e}")
 
