@@ -334,7 +334,6 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
     while True:
         if not is_started_whale() or is_paused_whale():
-            seen_hashes.clear()
             copied_event_slugs.clear()
             await asyncio.sleep(10)
             continue
