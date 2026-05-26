@@ -351,6 +351,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                 trades = r.json() if isinstance(r.json(), list) else []
 
             buys = [t for t in trades if t.get("side","").upper() == "BUY"]
+            log.info(f"[WHALE] poll: {len(trades)} trades, {len(buys)} BUYs")
             if not buys:
                 continue
 
