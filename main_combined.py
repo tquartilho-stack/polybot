@@ -310,7 +310,10 @@ async def scorer_loop(executor, portfolio, exit_manager, whale_portfolio=None):
 
 # ── WHALE LOOP v3 — live copy trader (1 wallet, 10s polling) ─────────────────
 
-WHALE_COPY_WALLET = "0x204f72f35326db932158cba6adff0b9a1da95e14"
+WHALE_COPY_WALLETS = [
+    "0x204f72f35326db932158cba6adff0b9a1da95e14",
+    "0x594d0c9a3eb7f958b9fc100e3088ffc5de99059d",
+]
 WHALE_POLL_SECS   = 10
 WHALE_BET_USDC    = 5.0   # tamanho fixo por bet
 
@@ -323,7 +326,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
     POLY_DATA_API = "https://data-api.polymarket.com"
 
-    log.info(f"[WHALE] Live copy trader iniciado — wallet {WHALE_COPY_WALLET[:10]}... poll={WHALE_POLL_SECS}s")
+    log.info(f"[WHALE] Live copy trader iniciado — {len(WHALE_COPY_WALLETS)} wallets poll={WHALE_POLL_SECS}s")
 
     if portfolio.positions:
         log.info(f"[WHALE] {len(portfolio.positions)} posições carregadas")
@@ -342,13 +345,16 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
 
         try:
             async with httpx.AsyncClient() as client:
-                r = await client.get(
-                    f"{POLY_DATA_API}/trades",
-                    params={"user": WHALE_COPY_WALLET, "limit": 50},
-                    timeout=10,
-                )
-                r.raise_for_status()
-                trades = r.json() if isinstance(r.json(), list) else []
+                results = await asyncio.gather(*[
+                    client.get(f"{POLY_DATA_API}/trades", params={"user": w, "limit": 50}, timeout=10)
+                    for w in WHALE_COPY_WALLETS
+                ], return_exceptions=True)
+                trades = []
+                for res in results:
+                    if not isinstance(res, Exception) and res.is_success:
+                        d = res.json()
+                        if isinstance(d, list):
+                            trades.extend(d)
 
             buys = [t for t in trades if t.get("side","").upper() == "BUY"]
             log.info(f"[WHALE] poll: {len(trades)} trades, {len(buys)} BUYs")
