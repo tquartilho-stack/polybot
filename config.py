@@ -46,7 +46,7 @@ POLL_INTERVAL_SECS  = 60           # frequência de verificação de posições 
 # ── Loop principal ──────────────────────────────────────────────────────────
 RUN_INTERVAL_MINS   = 30           # corre o bot de 30 em 30 minutos
 MAX_OPEN_POSITIONS  = 100           # máximo de posições abertas simultâneas
-MAX_DAILY_TRADES    = 100         # travão diário
+MAX_DAILY_TRADES    = 1000        # travão diário
 
 CLAUDE_MODEL        = "claude-sonnet-4-6"
 CLAUDE_HAIKU_MODEL  = "claude-haiku-4-5-20251001"

@@ -390,20 +390,25 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         log.info(f"[WHALE] SKIP world cup: {title[:40]}")
                         continue
 
-                    # Filtro 3: endDate > 7 dias (via CLOB)
+                    # Filtro 3: endDate > 7 dias (via CLOB) — sem data, rejeita
                     try:
                         from datetime import timedelta, date as _date
                         _clob_r = await client.get(f"https://clob.polymarket.com/markets/{cid}", timeout=5)
-                        if _clob_r.is_success:
-                            _end_raw = _clob_r.json().get("end_date_iso","")
-                            if _end_raw:
-                                _end_date = _date.fromisoformat(_end_raw[:10])
-                                _cutoff = (datetime.now(timezone.utc) + timedelta(days=7)).date()
-                                if _end_date > _cutoff:
-                                    log.info(f"[WHALE] SKIP >7d {_end_raw[:10]}: {title[:40]}")
-                                    continue
+                        if not _clob_r.is_success:
+                            log.info(f"[WHALE] SKIP sem CLOB: {title[:40]}")
+                            continue
+                        _end_raw = _clob_r.json().get("end_date_iso","")
+                        if not _end_raw:
+                            log.info(f"[WHALE] SKIP sem data: {title[:40]}")
+                            continue
+                        _end_date = _date.fromisoformat(_end_raw[:10])
+                        _cutoff = (datetime.now(timezone.utc) + timedelta(days=7)).date()
+                        if _end_date > _cutoff:
+                            log.info(f"[WHALE] SKIP >7d {_end_raw[:10]}: {title[:40]}")
+                            continue
                     except Exception as _ce:
-                        log.info(f"[WHALE] CLOB err {cid[:10]}: {_ce}")
+                        log.info(f"[WHALE] SKIP CLOB err {cid[:10]}: {_ce}")
+                        continue
 
                     # Filtro 4: já tens na Poly? (por eventSlug)
                     event_slug = t.get("eventSlug","")
