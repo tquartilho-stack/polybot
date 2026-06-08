@@ -402,7 +402,7 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                             log.info(f"[WHALE] SKIP sem data: {title[:40]}")
                             continue
                         _end_date = _date.fromisoformat(_end_raw[:10])
-                        _cutoff = (datetime.now(timezone.utc) + timedelta(days=7)).date()
+                        _cutoff = (datetime.now(timezone.utc) + timedelta(hours=48)).date()
                         if _end_date > _cutoff:
                             log.info(f"[WHALE] SKIP >7d {_end_raw[:10]}: {title[:40]}")
                             continue
