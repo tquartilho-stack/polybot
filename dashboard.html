@@ -24,6 +24,8 @@
   .agent-btn.on-whale .dot{background:var(--purple);box-shadow:0 0 6px var(--purple);}
   .agent-btn.on-scorer{border-color:rgba(0,230,118,.2);color:var(--green);}
   .agent-btn.on-whale{border-color:rgba(224,64,251,.2);color:var(--purple);}
+  .agent-btn.on-crypto .dot{background:var(--yellow);box-shadow:0 0 6px var(--yellow);}
+  .agent-btn.on-crypto{border-color:rgba(255,215,64,.2);color:var(--yellow);}
   .top-bar{display:flex;align-items:center;gap:24px;padding:16px 28px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
   .pnl-block{display:flex;flex-direction:column;gap:2px;}
   .pnl-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
@@ -61,6 +63,9 @@
     </button>
     <button class="agent-btn" id="btn-whale" onclick="toggleAgent('whale')">
       <div class="dot"></div><span>WHALE</span>
+    </button>
+    <button class="agent-btn" id="btn-crypto" onclick="toggleAgent('crypto')">
+      <div class="dot"></div><span>CRYPTO</span>
     </button>
   </div>
 </header>
@@ -108,7 +113,8 @@ const ADDR  = '0x0F4902690951B760C451A8f9dc81D72871359E18';
 async function toggleAgent(agent) {
   const btn = document.getElementById('btn-'+agent);
   const isOn = btn.classList.contains('on-'+agent);
-  const ep = isOn ? (agent==='scorer'?'/stop':'/stop-whale') : (agent==='scorer'?'/start':'/start-whale');
+  const eps = {scorer:['/stop','/start'], whale:['/stop-whale','/start-whale'], crypto:['/stop-crypto','/start-crypto']};
+  const ep = isOn ? eps[agent][0] : eps[agent][1];
   await fetch(ep, {method:'POST'});
   await checkStatus();
 }
@@ -117,8 +123,9 @@ async function checkStatus() {
   try {
     const r = await fetch('/status');
     const d = await r.json();
-    document.getElementById('btn-scorer').className = 'agent-btn'+(d.started&&!d.paused?' on-scorer':'');
-    document.getElementById('btn-whale').className  = 'agent-btn'+(d.started_whale&&!d.paused_whale?' on-whale':'');
+    document.getElementById('btn-scorer').className  = 'agent-btn'+(d.started&&!d.paused?' on-scorer':'');
+    document.getElementById('btn-whale').className   = 'agent-btn'+(d.started_whale&&!d.paused_whale?' on-whale':'');
+    document.getElementById('btn-crypto').className  = 'agent-btn'+(d.started_crypto&&!d.paused_crypto?' on-crypto':'');
   } catch(e) {}
 }
 

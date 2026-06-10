@@ -19,6 +19,8 @@ PAUSE_FILE      = DATA_DIR / "PAUSE"
 STARTED_FILE    = DATA_DIR / "STARTED"
 PAUSE_FILE_WHALE   = DATA_DIR / "PAUSE_WHALE"
 STARTED_FILE_WHALE = DATA_DIR / "STARTED_WHALE"
+PAUSE_FILE_CRYPTO   = DATA_DIR / "PAUSE_CRYPTO"
+STARTED_FILE_CRYPTO = DATA_DIR / "STARTED_CRYPTO"
 PORT = 8080
 
 # Registry de portfolios em memória — populado pelo main_combined
@@ -46,10 +48,12 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_file(DATA_DIR / "portfolio_state_whale.json", "application/json")
         elif path == "/status":
             self._json({
-                "paused":        PAUSE_FILE.exists(),
-                "started":       STARTED_FILE.exists(),
-                "paused_whale":  PAUSE_FILE_WHALE.exists(),
-                "started_whale": STARTED_FILE_WHALE.exists(),
+                "paused":         PAUSE_FILE.exists(),
+                "started":        STARTED_FILE.exists(),
+                "paused_whale":   PAUSE_FILE_WHALE.exists(),
+                "started_whale":  STARTED_FILE_WHALE.exists(),
+                "paused_crypto":  PAUSE_FILE_CRYPTO.exists(),
+                "started_crypto": STARTED_FILE_CRYPTO.exists(),
             })
         elif path.startswith("/poly-proxy"):
             from urllib.parse import urlencode, parse_qs, urlparse as _up
@@ -163,6 +167,17 @@ class Handler(BaseHTTPRequestHandler):
                 STARTED_FILE_WHALE.unlink()
             log.info("[DASHBOARD] Whale parado via dashboard")
             self._json({"started_whale": False, "paused_whale": False})
+        elif path == "/start-crypto":
+            STARTED_FILE_CRYPTO.write_text("started")
+            if PAUSE_FILE_CRYPTO.exists():
+                PAUSE_FILE_CRYPTO.unlink()
+            log.info("[DASHBOARD] Crypto iniciado via dashboard")
+            self._json({"started_crypto": True, "paused_crypto": False})
+        elif path == "/stop-crypto":
+            if STARTED_FILE_CRYPTO.exists():
+                STARTED_FILE_CRYPTO.unlink()
+            log.info("[DASHBOARD] Crypto parado via dashboard")
+            self._json({"started_crypto": False, "paused_crypto": False})
         else:
             self.send_response(404)
             self.end_headers()
@@ -209,3 +224,9 @@ def is_paused_whale() -> bool:
 
 def is_started_whale() -> bool:
     return STARTED_FILE_WHALE.exists()
+
+def is_paused_crypto() -> bool:
+    return PAUSE_FILE_CRYPTO.exists()
+
+def is_started_crypto() -> bool:
+    return STARTED_FILE_CRYPTO.exists()

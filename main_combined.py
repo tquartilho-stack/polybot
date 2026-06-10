@@ -26,7 +26,7 @@ from execution.executor     import Executor
 from execution.exit_manager import ExitManager
 from portfolio              import Portfolio
 from dashboard_writer       import write as write_scorer_dashboard
-from server                 import start_server, is_paused, is_started, is_paused_whale, is_started_whale
+from server                 import start_server, is_paused, is_started, is_paused_whale, is_started_whale, is_paused_crypto, is_started_crypto
 from reconcile              import reconcile_portfolio
 from pathlib import Path
 import json
@@ -507,6 +507,156 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
             log.error(f"[WHALE] Erro: {e}", exc_info=True)
 
 
+# ── CRYPTO LOOP (fast copy trader — 2s polling, accepting_orders filter) ─────────
+
+CRYPTO_COPY_WALLET = "0xb55fa1296e6ec55d0ce53d93b9237389f11764d4"
+CRYPTO_POLL_SECS   = 2
+CRYPTO_BET_USDC    = 5.0
+
+async def crypto_loop(executor, portfolio, exit_manager):
+    global _exit_task_whale  # reuse exit task pattern
+
+    import httpx
+    from data.models import Side, Market, AgentSignal, AgentName
+    from consensus import TradeDecision
+
+    POLY_DATA_API = "https://data-api.polymarket.com"
+    CLOB_API_URL  = "https://clob.polymarket.com"
+
+    _cycle = 0
+    copied_event_slugs: set[str] = set()
+    _exit_task = None
+
+    log.info(f"[CRYPTO] Live copy trader iniciado — wallet {CRYPTO_COPY_WALLET[:10]}... poll={CRYPTO_POLL_SECS}s")
+
+    if portfolio.positions:
+        log.info(f"[CRYPTO] {len(portfolio.positions)} posições carregadas")
+        _exit_task = asyncio.create_task(_exit_background(portfolio, exit_manager, "CRYPTO"))
+
+    while True:
+        if not is_started_crypto() or is_paused_crypto():
+            copied_event_slugs.clear()
+            await asyncio.sleep(2)
+            continue
+
+        await asyncio.sleep(CRYPTO_POLL_SECS)
+
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(
+                    f"{POLY_DATA_API}/trades",
+                    params={"user": CRYPTO_COPY_WALLET, "limit": 50},
+                    timeout=8,
+                )
+                if not r.is_success:
+                    continue
+                trades = r.json() if isinstance(r.json(), list) else []
+
+            buys = [t for t in trades if t.get("side","").upper() == "BUY"]
+            if not buys:
+                continue
+
+            _cycle += 1
+
+            from reconcile import fetch_real_positions
+            _real = await fetch_real_positions(POLY_PROXY_ADDRESS)
+            _real_cids = {p.get("conditionId","") for p in _real if float(p.get("curPrice",0)) > 0.02}
+
+            async with httpx.AsyncClient() as client:
+                for t in buys:
+                    cid       = t.get("conditionId","")
+                    price     = float(t.get("price", 0))
+                    title     = t.get("title","")
+                    event_slug = t.get("eventSlug","")
+                    outcome_idx = t.get("outcomeIndex", -1)
+                    side_str = "YES" if outcome_idx == 0 else "NO" if outcome_idx == 1 else ""
+
+                    if not cid or not side_str or price <= 0:
+                        continue
+                    if price < 0.05 or price > 0.95:
+                        continue
+                    if cid in _real_cids:
+                        continue
+                    if event_slug and event_slug in copied_event_slugs:
+                        continue
+                    if portfolio.already_open(cid):
+                        continue
+
+                    # Filtro: mercado ainda aceita ordens (via CLOB)
+                    try:
+                        _clob_r = await client.get(f"{CLOB_API_URL}/markets/{cid}", timeout=3)
+                        if not _clob_r.is_success:
+                            continue
+                        _clob = _clob_r.json()
+                        if not _clob.get("accepting_orders", False):
+                            log.info(f"[CRYPTO] SKIP not accepting: {title[:40]}")
+                            continue
+                    except Exception:
+                        continue
+
+                    if not portfolio.can_trade():
+                        log.info("[CRYPTO] can_trade=False — stop")
+                        break
+
+                    side = Side.YES if side_str == "YES" else Side.NO
+
+                    from datetime import timedelta
+                    resolves_at = datetime.now(timezone.utc) + timedelta(hours=1)
+                    market = Market(
+                        condition_id     = cid,
+                        question         = title,
+                        yes_price        = price if side == Side.YES else round(1-price,4),
+                        no_price         = price if side == Side.NO  else round(1-price,4),
+                        volume_usdc      = 0.0,
+                        liquidity_usdc   = 0.0,
+                        spread           = 0.02,
+                        resolves_at      = resolves_at,
+                        hours_to_resolve = 1.0,
+                    )
+
+                    sig = AgentSignal(
+                        agent           = AgentName.WHALE_COPY,
+                        market          = market,
+                        side            = side,
+                        confidence      = 1.0,
+                        reason          = f"crypto copy @ {price:.2f}",
+                        suggested_price = price + 0.01,
+                    )
+                    decision = TradeDecision(
+                        market            = market,
+                        side              = side,
+                        consensus_count   = 1,
+                        size_usdc         = CRYPTO_BET_USDC,
+                        entry_price       = price + 0.01,
+                        target_exit_price = round(price + 0.01 + 0.90 * (1.0 - (price + 0.01)), 4),
+                        signals           = [sig],
+                    )
+
+                    log.info(f"[CRYPTO] {side_str} {title[:45]} @ {price:.2f}")
+                    try:
+                        pos = executor.execute(decision)
+                    except Exception as ex:
+                        log.error(f"[CRYPTO/ERR] {ex}")
+                        pos = None
+
+                    if pos:
+                        portfolio.add_position(pos)
+                        if event_slug:
+                            copied_event_slugs.add(event_slug)
+                        log.info(f"[CRYPTO/OK] {side_str} {title[:45]} @ {price:.2f}")
+                    else:
+                        log.warning(f"[CRYPTO/FAIL] {side_str} {title[:45]}")
+
+            if portfolio.positions:
+                if not _exit_task or _exit_task.done():
+                    _exit_task = asyncio.create_task(_exit_background(portfolio, exit_manager, "CRYPTO"))
+
+            await reconcile_portfolio(portfolio, POLY_PROXY_ADDRESS, "CRYPTO")
+
+        except Exception as e:
+            log.error(f"[CRYPTO] Erro: {e}", exc_info=True)
+
+
 # ── Utils ─────────────────────────────────────────────────────────────────────
 
 def _print_decisions(decisions, color):
@@ -547,9 +697,22 @@ async def main():
     scorer_exit = ExitManager(executor)
     whale_exit  = ExitManager(executor)
 
+    crypto_portfolio = Portfolio(max_open=MAX_OPEN_POSITIONS, max_daily=MAX_DAILY_TRADES,
+                                  state_file=DATA_DIR / "portfolio_state_crypto.json")
+    crypto_executor = Executor(
+        private_key    = POLY_PRIVATE_KEY,
+        api_key        = POLY_API_KEY,
+        api_secret     = POLY_API_SECRET,
+        api_passphrase = POLY_API_PASSPHRASE,
+        proxy_addr     = POLY_PROXY_ADDRESS,
+        dry_run        = DRY_RUN,
+    )
+    crypto_exit = ExitManager(crypto_executor)
+
     await asyncio.gather(
         scorer_loop(executor, scorer_portfolio, scorer_exit, whale_portfolio),
         whale_loop(executor, whale_portfolio, whale_exit, scorer_portfolio),
+        crypto_loop(crypto_executor, crypto_portfolio, crypto_exit),
     )
 
 
