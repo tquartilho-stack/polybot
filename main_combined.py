@@ -313,7 +313,6 @@ async def scorer_loop(executor, portfolio, exit_manager, whale_portfolio=None):
 WHALE_COPY_WALLETS = [
     "0x204f72f35326db932158cba6adff0b9a1da95e14",
     "0x594d0c9a3eb7f958b9fc100e3088ffc5de99059d",
-    "0xb55fa1296e6ec55d0ce53d93b9237389f11764d4",
 ]
 WHALE_POLL_SECS   = 10
 WHALE_BET_USDC    = 5.0   # tamanho fixo por bet
