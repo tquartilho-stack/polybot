@@ -311,12 +311,10 @@ async def scorer_loop(executor, portfolio, exit_manager, whale_portfolio=None):
 # ── WHALE LOOP v3 — live copy trader (1 wallet, 10s polling) ─────────────────
 
 WHALE_COPY_WALLETS = [
-    "0xb91aeb5accc33a5f9a8615b8ed6b2d352e913987",
     "0x9f2fe025f84839ca81dd8e0338892605702d2ca8",
-    "0x84dbb7103982e3617704a2ed7d5b39691952aeeb",
-    "0x204f72f35326db932158cba6adff0b9a1da95e14",
+    "0xb91aeb5accc33a5f9a8615b8ed6b2d352e913987",
     "0x9703676286b93c2eca71ca96e8757104519a69c2",
-    "0x5268527977f700f9bf9b6d5cd843859e4e70135d",
+    "0x84dbb7103982e3617704a2ed7d5b39691952aeeb",
 ]
 WHALE_POLL_SECS   = 10
 WHALE_BET_USDC    = 5.0   # tamanho fixo por bet
@@ -389,8 +387,9 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         log.info(f"[WHALE] SKIP price={price:.2f}: {title[:40]}")
                         continue
 
-                    # Filtro 2: World Cup
-                    if "world cup" in title.lower() or "fifa" in title.lower():
+                    # Filtro 2: World Cup (título ou eventSlug "fifwc")
+                    _ev_slug_check = t.get("eventSlug","")
+                    if "world cup" in title.lower() or "fifa" in title.lower() or _ev_slug_check.startswith("fifwc"):
                         log.info(f"[WHALE] SKIP world cup: {title[:40]}")
                         continue
 
