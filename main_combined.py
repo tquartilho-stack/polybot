@@ -393,14 +393,18 @@ async def whale_loop(executor, portfolio, exit_manager, scorer_portfolio=None):
                         log.info(f"[WHALE] SKIP world cup: {title[:40]}")
                         continue
 
-                    # Filtro 3: endDate > 7 dias (via CLOB) — sem data, rejeita
+                    # Filtro 3: endDate > 7 dias (via CLOB) — sem data, rejeita. Também verifica accepting_orders.
                     try:
                         from datetime import timedelta, date as _date
                         _clob_r = await client.get(f"https://clob.polymarket.com/markets/{cid}", timeout=5)
                         if not _clob_r.is_success:
                             log.info(f"[WHALE] SKIP sem CLOB: {title[:40]}")
                             continue
-                        _end_raw = _clob_r.json().get("end_date_iso","")
+                        _clob_data = _clob_r.json()
+                        if not _clob_data.get("accepting_orders", False):
+                            log.info(f"[WHALE] SKIP mercado fechado: {title[:40]}")
+                            continue
+                        _end_raw = _clob_data.get("end_date_iso","")
                         if not _end_raw:
                             log.info(f"[WHALE] SKIP sem data: {title[:40]}")
                             continue
